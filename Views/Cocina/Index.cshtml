@@ -3,3 +3,90 @@
 }
 
 <h1>Cocina</h1>
+
+<div id="mensaje-accion" class="alert alert-danger d-none" role="alert"></div>
+<div id="tablero-cocina" aria-live="polite">
+    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <span>Cargando pedidos...</span>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const tablero = document.getElementById("tablero-cocina");
+        const mensajeAccion = document.getElementById("mensaje-accion");
+        const urlTablero = '@Url.Action("Tablero", "Cocina")';
+        let actualizando = false;
+
+        async function refrescarTablero() {
+            if (actualizando) return;
+            actualizando = true;
+
+            try {
+                const respuesta = await fetch(urlTablero, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+
+                if (!respuesta.ok) {
+                    throw new Error("No fue posible actualizar los pedidos.");
+                }
+
+                tablero.innerHTML = await respuesta.text();
+                mensajeAccion.classList.add("d-none");
+            } catch (error) {
+                mostrarMensaje(error.message);
+            } finally {
+                actualizando = false;
+            }
+        }
+
+        function mostrarMensaje(mensaje) {
+            mensajeAccion.textContent = mensaje;
+            mensajeAccion.classList.remove("d-none");
+        }
+
+        tablero.addEventListener("submit", async evento => {
+            const formulario = evento.target.closest("form");
+            if (!formulario) return;
+
+            evento.preventDefault();
+            const boton = formulario.querySelector("button[type='submit']");
+            boton.disabled = true;
+            mensajeAccion.classList.add("d-none");
+
+            try {
+                const respuesta = await fetch(formulario.action, {
+                    method: "POST",
+                    body: new FormData(formulario),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+
+                const resultado = await respuesta.json();
+                if (!respuesta.ok) {
+                    mostrarMensaje(resultado.mensaje || "No fue posible cambiar el estado del pedido.");
+                    return;
+                }
+
+                await refrescarTablero();
+            } catch {
+                mostrarMensaje("No fue posible conectar con el servidor. Inténtalo nuevamente.");
+            } finally {
+                boton.disabled = false;
+            }
+        });
+
+        refrescarTablero();
+        window.setInterval(refrescarTablero, 10000);
+    </script>
+}

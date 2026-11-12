@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 
 namespace EasyMenu.Web.Services;
 
@@ -17,6 +18,31 @@ public sealed class EasyMenuApiClient(HttpClient httpClient)
         }
 
         return await response.Content.ReadFromJsonAsync<LoginResponse>(cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ObtenerPedidosPorEstadoAsync(
+        string estado,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"pedidos/estado/{Uri.EscapeDataString(estado)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> CambiarEstadoPedidoAsync(
+        string id,
+        string estado,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"pedidos/{Uri.EscapeDataString(id)}/estado?estado={Uri.EscapeDataString(estado)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
     }
 }
 

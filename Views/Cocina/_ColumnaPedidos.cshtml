@@ -1,0 +1,47 @@
+@model EasyMenu.Web.Models.ColumnaPedidosViewModel
+
+<section aria-label="@Model.Titulo">
+    <h2 class="h4 mb-3">@Model.Titulo <span class="badge text-bg-secondary">@Model.Pedidos.Count</span></h2>
+
+    @if (Model.Pedidos.Count == 0)
+    {
+        <p class="text-secondary">No hay pedidos.</p>
+    }
+
+    @foreach (var pedido in Model.Pedidos)
+    {
+        <article class="card mb-3">
+            <div class="card-body">
+                <h3 class="h5 card-title">@pedido.CodigoCorto</h3>
+                @if (!string.IsNullOrWhiteSpace(pedido.ClienteOMesa))
+                {
+                    <p class="card-text text-secondary">@pedido.ClienteOMesa</p>
+                }
+
+                @if (pedido.Productos.Count > 0)
+                {
+                    <ul class="list-group list-group-flush mb-3">
+                        @foreach (var producto in pedido.Productos)
+                        {
+                            <li class="list-group-item px-0">
+                                <span class="fw-semibold">@producto.Cantidad × @producto.Nombre</span>
+                                @if (!string.IsNullOrWhiteSpace(producto.Notas))
+                                {
+                                    <div class="small text-secondary">Notas: @producto.Notas</div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+
+                <form asp-controller="Cocina" asp-action="CambiarEstado" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@pedido.Id" />
+                    <input type="hidden" name="estadoActual" value="@Model.EstadoActual" />
+                    <input type="hidden" name="estado" value="@Model.SiguienteEstado" />
+                    <button class="btn btn-primary" type="submit">@Model.TextoBoton</button>
+                </form>
+            </div>
+        </article>
+    }
+</section>

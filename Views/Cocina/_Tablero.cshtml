@@ -1,0 +1,39 @@
+@model EasyMenu.Web.Models.TableroCocinaViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger" role="alert">@Model.Mensaje</div>
+}
+
+<div class="row g-3">
+    <div class="col-12 col-lg-4">
+        @await Html.PartialAsync("_ColumnaPedidos", new EasyMenu.Web.Models.ColumnaPedidosViewModel
+        {
+            Titulo = "Recibidos",
+            Pedidos = Model.Recibidos,
+            TextoBoton = "Preparar",
+            EstadoActual = "RECIBIDO",
+            SiguienteEstado = "EN_PREPARACION"
+        })
+    </div>
+    <div class="col-12 col-lg-4">
+        @await Html.PartialAsync("_ColumnaPedidos", new EasyMenu.Web.Models.ColumnaPedidosViewModel
+        {
+            Titulo = "En preparación",
+            Pedidos = Model.EnPreparacion,
+            TextoBoton = "Marcar listo",
+            EstadoActual = "EN_PREPARACION",
+            SiguienteEstado = "LISTO"
+        })
+    </div>
+    <div class="col-12 col-lg-4">
+        @await Html.PartialAsync("_ColumnaPedidos", new EasyMenu.Web.Models.ColumnaPedidosViewModel
+        {
+            Titulo = "Listos",
+            Pedidos = Model.Listos,
+            TextoBoton = "Entregar",
+            EstadoActual = "LISTO",
+            SiguienteEstado = "ENTREGADO"
+        })
+    </div>
+</div>

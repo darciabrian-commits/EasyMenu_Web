@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 namespace EasyMenu.Web.Filters;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public sealed class RequireRoleAttribute(string rolRequerido) : ActionFilterAttribute
+public sealed class RequireRoleAttribute(params string[] rolesPermitidos) : ActionFilterAttribute
 {
     public override void OnActionExecuting(ActionExecutingContext context)
     {
@@ -18,7 +18,7 @@ public sealed class RequireRoleAttribute(string rolRequerido) : ActionFilterAttr
             return;
         }
 
-        if (!string.Equals(rol, rolRequerido, StringComparison.Ordinal))
+        if (!rolesPermitidos.Contains(rol, StringComparer.Ordinal))
         {
             context.Result = new RedirectToActionResult(
                 "Login",
