@@ -1,0 +1,29 @@
+@model EasyMenu.Web.Models.PedidosPorCobrarViewModel
+
+<section>
+    <h2 class="h4 mb-3">Pedidos por cobrar <span class="badge text-bg-secondary">@Model.Pedidos.Count</span></h2>
+    @if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+    {
+        <div class="alert alert-danger" role="alert">@Model.Mensaje</div>
+    }
+    else if (Model.Pedidos.Count == 0)
+    {
+        <p class="text-secondary">No hay pedidos pendientes de pago.</p>
+    }
+
+    @foreach (var pedido in Model.Pedidos)
+    {
+        <button type="button" class="card text-start w-100 mb-2" data-codigo="@pedido.CodigoCorto">
+            <span class="card-body">
+                <span class="d-flex justify-content-between gap-2">
+                    <span class="fw-semibold">@pedido.CodigoCorto</span>
+                    <span class="fw-semibold">@pedido.Total.ToString("C2")</span>
+                </span>
+                @if (!string.IsNullOrWhiteSpace(pedido.ClienteOMesa))
+                {
+                    <span class="d-block text-secondary small mt-1">@pedido.ClienteOMesa</span>
+                }
+            </span>
+        </button>
+    }
+</section>

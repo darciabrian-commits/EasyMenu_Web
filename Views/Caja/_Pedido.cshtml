@@ -1,0 +1,75 @@
+@model EasyMenu.Web.Models.PedidoCajaViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-warning" role="alert">@Model.Mensaje</div>
+}
+else
+{
+    <article class="card">
+        <div class="card-body">
+            <h2 class="h4 card-title">@Model.CodigoCorto</h2>
+            @if (!string.IsNullOrWhiteSpace(Model.ClienteOMesa))
+            {
+                <p class="text-secondary">@Model.ClienteOMesa</p>
+            }
+
+            <h3 class="h5">Productos</h3>
+            @if (Model.Productos.Count > 0)
+            {
+                <ul class="list-group list-group-flush mb-3">
+                    @foreach (var producto in Model.Productos)
+                    {
+                        <li class="list-group-item px-0 d-flex justify-content-between gap-3">
+                            <span>@producto.Cantidad × @producto.Nombre</span>
+                            <span class="text-nowrap">@producto.Subtotal.ToString("C2")</span>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="text-secondary">El pedido no tiene productos.</p>
+            }
+
+            <dl class="row mb-3">
+                <dt class="col-5">Estado</dt>
+                <dd class="col-7">@Model.Estado</dd>
+                <dt class="col-5">Total</dt>
+                <dd class="col-7 fw-bold">@Model.Total.ToString("C2")</dd>
+            </dl>
+
+            @if (Model.Estado == "PENDIENTE_PAGO")
+            {
+                <hr />
+                <h3 class="h5">Cobrar pedido</h3>
+                <form asp-controller="Caja" asp-action="Cobrar" method="post" data-cobro
+                      data-total="@Model.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="pedidoId" value="@Model.Id" />
+                    <input type="hidden" name="totalPedido"
+                           value="@Model.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                    <div class="mb-3">
+                        <label class="form-label" for="metodo-pago">Método de pago</label>
+                        <select id="metodo-pago" name="metodoPago" class="form-select" required>
+                            <option value="">Selecciona un método</option>
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="TARJETA">Tarjeta</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 d-none" data-monto-recibido>
+                        <label class="form-label" for="monto-recibido">Monto recibido</label>
+                        <input id="monto-recibido" name="montoRecibido" type="number"
+                               min="@Model.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                               step="0.01" class="form-control" disabled />
+                    </div>
+                    <p class="mb-3 d-none" data-cambio-contenedor aria-live="polite">
+                        Cambio: <strong>$<span data-cambio>0.00</span></strong>
+                    </p>
+                    <button class="btn btn-primary" type="submit">Confirmar cobro</button>
+                </form>
+            }
+        </div>
+    </article>
+}

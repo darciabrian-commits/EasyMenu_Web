@@ -1,0 +1,17 @@
+@model EasyMenu.Web.Models.ComprobanteCajaViewModel
+
+<section class="card border-success" aria-labelledby="titulo-comprobante">
+    <div class="card-body">
+        <h2 id="titulo-comprobante" class="h4 text-success">Comprobante de pago</h2>
+        <dl class="row mb-0">
+            <dt class="col-6">Total</dt>
+            <dd class="col-6">@Model.Total.ToString("C2")</dd>
+            <dt class="col-6">Método de pago</dt>
+            <dd class="col-6">@Model.MetodoPago</dd>
+            <dt class="col-6">Monto recibido</dt>
+            <dd class="col-6">@(Model.MontoRecibido?.ToString("C2") ?? "No aplica")</dd>
+            <dt class="col-6">Cambio</dt>
+            <dd class="col-6">@Model.Cambio.ToString("C2")</dd>
+        </dl>
+    </div>
+</section>

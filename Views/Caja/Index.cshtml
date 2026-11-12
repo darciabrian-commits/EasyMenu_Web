@@ -3,3 +3,164 @@
 }
 
 <h1>Caja</h1>
+
+<div id="mensaje-caja" class="alert alert-danger d-none" role="alert"></div>
+<div class="row g-3">
+    <aside class="col-12 col-lg-5" aria-label="Pedidos por cobrar">
+        <div id="pedidos-por-cobrar" aria-live="polite">
+            <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>Cargando pedidos...</span>
+            </div>
+        </div>
+    </aside>
+
+    <section class="col-12 col-lg-7" aria-label="Cobro de pedidos">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h2 class="h5 card-title">Buscar pedido</h2>
+                <form id="buscar-pedido" class="d-flex gap-2" method="get" action="@Url.Action("Pedido", "Caja")">
+                    <label class="visually-hidden" for="codigo-corto">Código corto</label>
+                    <input id="codigo-corto" name="codigoCorto" class="form-control" autocomplete="off"
+                           placeholder="Código corto" required />
+                    <button class="btn btn-outline-primary flex-shrink-0" type="submit">Buscar</button>
+                </form>
+            </div>
+        </div>
+        <div id="detalle-pedido" aria-live="polite">
+            <p class="text-secondary">Selecciona un pedido de la lista o búscalo por su código.</p>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        const listaPedidos = document.getElementById("pedidos-por-cobrar");
+        const detallePedido = document.getElementById("detalle-pedido");
+        const mensajeCaja = document.getElementById("mensaje-caja");
+        const formularioBusqueda = document.getElementById("buscar-pedido");
+        let actualizandoPedidos = false;
+
+        async function refrescarPedidos() {
+            if (actualizandoPedidos) return;
+            actualizandoPedidos = true;
+
+            try {
+                const respuesta = await fetch('@Url.Action("PedidosPorCobrar", "Caja")', {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible actualizar los pedidos.");
+                listaPedidos.innerHTML = await respuesta.text();
+            } catch (error) {
+                mostrarMensaje(error.message || "No fue posible actualizar los pedidos.");
+            } finally {
+                actualizandoPedidos = false;
+            }
+        }
+
+        function mostrarMensaje(mensaje) {
+            mensajeCaja.textContent = mensaje;
+            mensajeCaja.classList.remove("d-none");
+        }
+
+        async function abrirPedido(codigoCorto) {
+            detallePedido.innerHTML = '<div class="d-flex align-items-center gap-2 text-secondary" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Cargando pedido...</span></div>';
+            try {
+                const url = new URL('@Url.Action("Pedido", "Caja")', window.location.origin);
+                url.searchParams.set("codigoCorto", codigoCorto);
+                const respuesta = await fetch(url, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar el pedido.");
+                detallePedido.innerHTML = await respuesta.text();
+                mensajeCaja.classList.add("d-none");
+            } catch (error) {
+                mostrarMensaje(error.message || "No fue posible cargar el pedido.");
+            }
+        }
+
+        listaPedidos.addEventListener("click", evento => {
+            const boton = evento.target.closest("[data-codigo]");
+            if (boton) abrirPedido(boton.dataset.codigo);
+        });
+
+        formularioBusqueda.addEventListener("submit", evento => {
+            evento.preventDefault();
+            abrirPedido(formularioBusqueda.elements.codigoCorto.value.trim());
+        });
+
+        detallePedido.addEventListener("change", evento => {
+            if (evento.target.matches("[name='metodoPago']")) {
+                const formulario = evento.target.form;
+                const campoMonto = formulario.querySelector("[name='montoRecibido']");
+                const grupoMonto = formulario.querySelector("[data-monto-recibido]");
+                const grupoCambio = formulario.querySelector("[data-cambio-contenedor]");
+                const esEfectivo = evento.target.value === "EFECTIVO";
+                grupoMonto.classList.toggle("d-none", !esEfectivo);
+                grupoCambio.classList.toggle("d-none", !esEfectivo);
+                campoMonto.disabled = !esEfectivo;
+                campoMonto.required = esEfectivo;
+                actualizarCambio(formulario);
+            }
+        });
+
+        detallePedido.addEventListener("input", evento => {
+            if (evento.target.matches("[name='montoRecibido']")) {
+                actualizarCambio(evento.target.form);
+            }
+        });
+
+        function actualizarCambio(formulario) {
+            if (!formulario || formulario.elements.metodoPago.value !== "EFECTIVO") return;
+            const total = Number(formulario.dataset.total);
+            const recibido = Number(formulario.elements.montoRecibido.value);
+            const cambio = formulario.querySelector("[data-cambio]");
+            cambio.textContent = Number.isFinite(recibido) && recibido >= total
+                ? (recibido - total).toFixed(2)
+                : "0.00";
+        }
+
+        detallePedido.addEventListener("submit", async evento => {
+            const formulario = evento.target.closest("form[data-cobro]");
+            if (!formulario) return;
+
+            evento.preventDefault();
+            const boton = formulario.querySelector("button[type='submit']");
+            boton.disabled = true;
+            mensajeCaja.classList.add("d-none");
+            try {
+                const respuesta = await fetch(formulario.action, {
+                    method: "POST",
+                    body: new FormData(formulario),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) {
+                    const resultado = await respuesta.json();
+                    mostrarMensaje(resultado.mensaje || "No fue posible completar el cobro.");
+                    return;
+                }
+                detallePedido.innerHTML = await respuesta.text();
+                await refrescarPedidos();
+            } catch {
+                mostrarMensaje("No fue posible conectar con el servidor. Inténtalo nuevamente.");
+            } finally {
+                boton.disabled = false;
+            }
+        });
+
+        refrescarPedidos();
+        window.setInterval(refrescarPedidos, 10000);
+    </script>
+}
