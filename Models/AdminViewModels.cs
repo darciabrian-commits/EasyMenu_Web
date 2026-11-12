@@ -27,9 +27,8 @@ public sealed class ProductoFormularioViewModel
     [StringLength(100, ErrorMessage = "El nombre no puede superar los 100 caracteres.")]
     public string Nombre { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Ingresa la descripción del producto.")]
     [StringLength(255, ErrorMessage = "La descripción no puede superar los 255 caracteres.")]
-    public string Descripcion { get; set; } = string.Empty;
+    public string? Descripcion { get; set; }
 
     [Range(typeof(decimal), "0.0000000000000000000000000001", "79228162514264337593543950335",
         ErrorMessage = "El precio debe ser mayor que 0.")]

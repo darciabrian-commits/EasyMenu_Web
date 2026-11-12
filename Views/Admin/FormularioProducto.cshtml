@@ -53,11 +53,22 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
-        document.getElementById("formulario-producto").addEventListener("submit", evento => {
-            if (!evento.target.reportValidity()) return;
-            const boton = evento.target.querySelector("button[type='submit']");
-            boton.disabled = true;
-            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando...';
+        const formularioProducto = $("#formulario-producto");
+        const botonProducto = formularioProducto.find("button[type='submit']");
+        const textoBotonProducto = botonProducto.html();
+
+        formularioProducto.on("submit", function () {
+            if (!formularioProducto.valid()) {
+                botonProducto.prop("disabled", false).html(textoBotonProducto);
+                return;
+            }
+
+            botonProducto.prop("disabled", true);
+            botonProducto.html('<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando...');
+        });
+
+        window.addEventListener("pageshow", () => {
+            botonProducto.prop("disabled", false).html(textoBotonProducto);
         });
     </script>
 }

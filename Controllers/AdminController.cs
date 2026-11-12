@@ -164,7 +164,7 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
             using var response = modelo.Id is null
                 ? await apiClient.CrearProductoAsync(
                     modelo.Nombre,
-                    modelo.Descripcion,
+                    modelo.Descripcion ?? string.Empty,
                     modelo.Precio,
                     modelo.Categoria,
                     token,
@@ -172,7 +172,7 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
                 : await apiClient.ActualizarProductoAsync(
                     modelo.Id,
                     modelo.Nombre,
-                    modelo.Descripcion,
+                    modelo.Descripcion ?? string.Empty,
                     modelo.Precio,
                     modelo.Categoria,
                     token,

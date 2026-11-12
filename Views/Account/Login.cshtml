@@ -35,9 +35,24 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
-        document.getElementById("loginForm").addEventListener("submit", function () {
-            document.getElementById("loginButton").disabled = true;
-            document.getElementById("loadingMessage").hidden = false;
+        const formularioLogin = $("#loginForm");
+        const botonLogin = document.getElementById("loginButton");
+        const mensajeCarga = document.getElementById("loadingMessage");
+
+        formularioLogin.on("submit", function () {
+            if (!formularioLogin.valid()) {
+                botonLogin.disabled = false;
+                mensajeCarga.hidden = true;
+                return;
+            }
+
+            botonLogin.disabled = true;
+            mensajeCarga.hidden = false;
+        });
+
+        window.addEventListener("pageshow", () => {
+            botonLogin.disabled = false;
+            mensajeCarga.hidden = true;
         });
     </script>
 }

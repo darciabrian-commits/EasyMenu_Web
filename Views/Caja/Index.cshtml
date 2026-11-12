@@ -34,6 +34,7 @@
 </div>
 
 @section Scripts {
+    <partial name="_ValidationScriptsPartial" />
     <script>
         const listaPedidos = document.getElementById("pedidos-por-cobrar");
         const detallePedido = document.getElementById("detalle-pedido");
@@ -147,8 +148,12 @@
             if (!formulario) return;
 
             evento.preventDefault();
+            if (!$(formulario).valid()) return;
+
             const boton = formulario.querySelector("button[type='submit']");
+            const textoOriginal = boton.innerHTML;
             boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Cargando...';
             mensajeCaja.classList.add("d-none");
             try {
                 const respuesta = await fetch(formulario.action, {
@@ -171,6 +176,7 @@
                 mostrarMensaje("No fue posible conectar con el servidor. Inténtalo nuevamente.");
             } finally {
                 boton.disabled = false;
+                boton.innerHTML = textoOriginal;
             }
         });
 
@@ -179,11 +185,13 @@
             if (!formulario) return;
 
             evento.preventDefault();
-            if (!formulario.reportValidity()) return;
+            if (!$(formulario).valid()) return;
             if (!window.confirm("¿Seguro que quieres reembolsar este pago?")) return;
 
             const boton = formulario.querySelector("button[type='submit']");
+            const textoOriginal = boton.innerHTML;
             boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Guardando...';
             mensajeCaja.classList.add("d-none");
             try {
                 const respuesta = await fetch(formulario.action, {
@@ -208,7 +216,19 @@
                 mostrarMensaje("No fue posible conectar con el servidor. Inténtalo nuevamente.");
             } finally {
                 boton.disabled = false;
+                boton.innerHTML = textoOriginal;
             }
+        });
+
+        window.addEventListener("pageshow", () => {
+            detallePedido.querySelectorAll("form[data-cobro], form[data-reembolso]").forEach(formulario => {
+                const boton = formulario.querySelector("button[type='submit']");
+                if (!boton) return;
+                boton.disabled = false;
+                boton.innerHTML = formulario.matches("[data-cobro]")
+                    ? "Confirmar cobro"
+                    : "Confirmar reembolso";
+            });
         });
 
         refrescarPedidos();
