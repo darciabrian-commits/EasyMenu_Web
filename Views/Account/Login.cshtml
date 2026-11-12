@@ -1,0 +1,43 @@
+@model EasyMenu.Web.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Iniciar sesión";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <h1 class="mb-4">Iniciar sesión</h1>
+        @if (ViewBag.Aviso is not null)
+        {
+            <div class="alert alert-warning" role="alert">@ViewBag.Aviso</div>
+        }
+        @if (ViewBag.ErrorLogin is not null)
+        {
+            <div class="alert alert-danger" role="alert">@ViewBag.ErrorLogin</div>
+        }
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <form asp-action="Login" method="post" id="loginForm">
+            <div class="mb-3">
+                <label asp-for="Correo" class="form-label">Correo</label>
+                <input asp-for="Correo" class="form-control" autocomplete="username" />
+                <span asp-validation-for="Correo" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Clave" class="form-label">Clave</label>
+                <input asp-for="Clave" class="form-control" autocomplete="current-password" />
+                <span asp-validation-for="Clave" class="text-danger"></span>
+            </div>
+            <button type="submit" class="btn btn-primary" id="loginButton">Ingresar</button>
+            <span id="loadingMessage" class="ms-2" role="status" hidden>Cargando...</span>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById("loginForm").addEventListener("submit", function () {
+            document.getElementById("loginButton").disabled = true;
+            document.getElementById("loadingMessage").hidden = false;
+        });
+    </script>
+}
