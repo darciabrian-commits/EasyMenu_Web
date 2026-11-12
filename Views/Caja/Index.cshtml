@@ -62,13 +62,16 @@
             }
         }
 
-        function mostrarMensaje(mensaje) {
+        function mostrarMensaje(mensaje, tipo = "danger") {
             mensajeCaja.textContent = mensaje;
+            mensajeCaja.classList.remove("alert-danger", "alert-success");
+            mensajeCaja.classList.add(tipo === "success" ? "alert-success" : "alert-danger");
             mensajeCaja.classList.remove("d-none");
         }
 
-        async function abrirPedido(codigoCorto) {
+        async function abrirPedido(codigoCorto, conservarMensaje = false) {
             detallePedido.innerHTML = '<div class="d-flex align-items-center gap-2 text-secondary" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Cargando pedido...</span></div>';
+            if (!conservarMensaje) mensajeCaja.classList.add("d-none");
             try {
                 const url = new URL('@Url.Action("Pedido", "Caja")', window.location.origin);
                 url.searchParams.set("codigoCorto", codigoCorto);
@@ -77,13 +80,14 @@
                 });
                 if (respuesta.redirected) {
                     window.location.href = respuesta.url;
-                    return;
+                    return false;
                 }
                 if (!respuesta.ok) throw new Error("No fue posible cargar el pedido.");
                 detallePedido.innerHTML = await respuesta.text();
-                mensajeCaja.classList.add("d-none");
+                return true;
             } catch (error) {
                 mostrarMensaje(error.message || "No fue posible cargar el pedido.");
+                return false;
             }
         }
 
@@ -115,6 +119,16 @@
         detallePedido.addEventListener("input", evento => {
             if (evento.target.matches("[name='montoRecibido']")) {
                 actualizarCambio(evento.target.form);
+            }
+        });
+
+        detallePedido.addEventListener("click", evento => {
+            const boton = evento.target.closest("[data-mostrar-reembolso]");
+            if (boton) {
+                const formulario = boton.parentElement.querySelector("[data-reembolso]");
+                formulario.classList.remove("d-none");
+                formulario.querySelector("[name='motivo']").focus();
+                boton.classList.add("d-none");
             }
         });
 
@@ -153,6 +167,43 @@
                 }
                 detallePedido.innerHTML = await respuesta.text();
                 await refrescarPedidos();
+            } catch {
+                mostrarMensaje("No fue posible conectar con el servidor. Inténtalo nuevamente.");
+            } finally {
+                boton.disabled = false;
+            }
+        });
+
+        detallePedido.addEventListener("submit", async evento => {
+            const formulario = evento.target.closest("form[data-reembolso]");
+            if (!formulario) return;
+
+            evento.preventDefault();
+            if (!formulario.reportValidity()) return;
+            if (!window.confirm("¿Seguro que quieres reembolsar este pago?")) return;
+
+            const boton = formulario.querySelector("button[type='submit']");
+            boton.disabled = true;
+            mensajeCaja.classList.add("d-none");
+            try {
+                const respuesta = await fetch(formulario.action, {
+                    method: "POST",
+                    body: new FormData(formulario),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) {
+                    const resultado = await respuesta.json();
+                    mostrarMensaje(resultado.mensaje || "No fue posible completar el reembolso.");
+                    return;
+                }
+
+                const codigoCorto = detallePedido.querySelector("h2.card-title").textContent.trim();
+                await abrirPedido(codigoCorto, true);
+                mostrarMensaje("Reembolso realizado correctamente. El pedido quedó cancelado.", "success");
             } catch {
                 mostrarMensaje("No fue posible conectar con el servidor. Inténtalo nuevamente.");
             } finally {

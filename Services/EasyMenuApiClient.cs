@@ -59,6 +59,31 @@ public sealed class EasyMenuApiClient(HttpClient httpClient)
         return await httpClient.SendAsync(request, cancellationToken);
     }
 
+    public async Task<HttpResponseMessage> ObtenerPagoPorPedidoAsync(
+        string pedidoId,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"pagos/pedido/{Uri.EscapeDataString(pedidoId)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ReembolsarPagoAsync(
+        string pagoId,
+        string motivo,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"pagos/{Uri.EscapeDataString(pagoId)}/reembolsar?motivo={Uri.EscapeDataString(motivo)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
     public async Task<HttpResponseMessage> CambiarEstadoPedidoAsync(
         string id,
         string estado,

@@ -70,6 +70,53 @@ else
                     <button class="btn btn-primary" type="submit">Confirmar cobro</button>
                 </form>
             }
+
+            @if (!string.IsNullOrWhiteSpace(Model.MensajePago))
+            {
+                <div class="alert alert-warning mt-3" role="alert">@Model.MensajePago</div>
+            }
+
+            @if (Model.Pago?.Estado is "COMPLETADO" or "REEMBOLSADO")
+            {
+                <hr />
+                <section aria-labelledby="titulo-pago">
+                    <h3 id="titulo-pago" class="h5">Datos del pago</h3>
+                    <dl class="row mb-3">
+                        <dt class="col-5">Método</dt>
+                        <dd class="col-7">@Model.Pago.MetodoPago</dd>
+                        <dt class="col-5">Total</dt>
+                        <dd class="col-7">@Model.Pago.Total.ToString("C2")</dd>
+                        <dt class="col-5">Recibido</dt>
+                        <dd class="col-7">@(Model.Pago.MontoRecibido?.ToString("C2") ?? "No aplica")</dd>
+                        <dt class="col-5">Cambio</dt>
+                        <dd class="col-7">@(Model.Pago.Cambio?.ToString("C2") ?? "No aplica")</dd>
+                    </dl>
+
+                    @if (Model.Pago.Estado == "COMPLETADO")
+                    {
+                        <button class="btn btn-outline-danger" type="button" data-mostrar-reembolso>
+                            Reembolsar
+                        </button>
+                        <form asp-controller="Caja" asp-action="Reembolsar" method="post"
+                              class="mt-3 d-none" data-reembolso>
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="pagoId" value="@Model.Pago.Id" />
+                            <div class="mb-3">
+                                <label class="form-label" for="motivo-reembolso">Motivo del reembolso</label>
+                                <textarea id="motivo-reembolso" name="motivo" class="form-control"
+                                          rows="3" required></textarea>
+                            </div>
+                            <button class="btn btn-danger" type="submit">Confirmar reembolso</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary mb-0" role="status">
+                            Pago reembolsado. Motivo: @(Model.Pago.MotivoReembolso ?? "No especificado")
+                        </div>
+                    }
+                </section>
+            }
         </div>
     </article>
 }

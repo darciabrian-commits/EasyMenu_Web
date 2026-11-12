@@ -119,7 +119,24 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            return PartialView("_Pedido", ConvertirPedido(documento.RootElement));
+            var pedido = ConvertirPedido(documento.RootElement);
+            var resultadoPago = await ObtenerPagoAsync(pedido.Id, token, cancellationToken);
+            if (resultadoPago.SinAutorizacion)
+            {
+                return IrAlLogin();
+            }
+
+            return PartialView("_Pedido", new PedidoCajaViewModel
+            {
+                Id = pedido.Id,
+                CodigoCorto = pedido.CodigoCorto,
+                ClienteOMesa = pedido.ClienteOMesa,
+                Estado = pedido.Estado,
+                Total = pedido.Total,
+                Productos = pedido.Productos,
+                Pago = resultadoPago.Pago,
+                MensajePago = resultadoPago.Mensaje
+            });
         }
         catch (HttpRequestException)
         {
@@ -227,6 +244,123 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
             {
                 mensaje = "La respuesta del cobro no tiene un formato válido."
             });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reembolsar(
+        string pagoId,
+        string motivo,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(pagoId) || string.IsNullOrWhiteSpace(motivo))
+        {
+            return BadRequest(new { mensaje = "Escribe el motivo del reembolso." });
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.ReembolsarPagoAsync(
+                pagoId,
+                motivo.Trim(),
+                token,
+                cancellationToken);
+
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode((int)response.StatusCode, new
+                {
+                    mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            return Ok(new { mensaje = "Reembolso realizado correctamente." });
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode((int)HttpStatusCode.ServiceUnavailable, new
+            {
+                mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return StatusCode((int)HttpStatusCode.ServiceUnavailable, new
+            {
+                mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+    }
+
+    private async Task<ResultadoPago> ObtenerPagoAsync(
+        string pedidoId,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await apiClient.ObtenerPagoPorPedidoAsync(
+                pedidoId,
+                token,
+                cancellationToken);
+
+            if (EsSinAutorizacion(response))
+            {
+                return new ResultadoPago(null, null, true);
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return new ResultadoPago(null, null, false);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ResultadoPago(
+                    null,
+                    await LeerMensajeErrorAsync(response, cancellationToken),
+                    false);
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var datos = BuscarObjeto(documento.RootElement, "pago")
+                ?? BuscarObjeto(documento.RootElement, "data")
+                ?? documento.RootElement;
+            return new ResultadoPago(new PagoCajaViewModel
+            {
+                Id = ObtenerTexto(datos, "id", "pagoId") ?? string.Empty,
+                Estado = ObtenerTexto(datos, "estado", "estadoPago")?.ToUpperInvariant() ?? string.Empty,
+                MetodoPago = ObtenerTexto(datos, "metodoPago", "metodo") ?? string.Empty,
+                Total = ObtenerDecimal(datos, "total", "montoTotal", "totalPedido") ?? 0m,
+                MontoRecibido = ObtenerDecimal(datos, "montoRecibido"),
+                Cambio = ObtenerDecimal(datos, "cambio"),
+                MotivoReembolso = ObtenerTexto(datos, "motivoReembolso", "motivo")
+            }, null, false);
+        }
+        catch (HttpRequestException)
+        {
+            return new ResultadoPago(null, "No fue posible consultar el pago. Inténtalo nuevamente.", false);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new ResultadoPago(null, "El servidor tardó demasiado en responder. Inténtalo nuevamente.", false);
+        }
+        catch (JsonException)
+        {
+            return new ResultadoPago(null, "La respuesta del pago no tiene un formato válido.", false);
         }
     }
 
@@ -438,4 +572,6 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
         valor = default;
         return false;
     }
+
+    private readonly record struct ResultadoPago(PagoCajaViewModel? Pago, string? Mensaje, bool SinAutorizacion);
 }

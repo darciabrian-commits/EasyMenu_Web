@@ -15,6 +15,19 @@ public sealed class PedidoCajaViewModel
     public decimal Total { get; init; }
     public List<ProductoCajaViewModel> Productos { get; init; } = [];
     public string? Mensaje { get; init; }
+    public string? MensajePago { get; init; }
+    public PagoCajaViewModel? Pago { get; init; }
+}
+
+public sealed class PagoCajaViewModel
+{
+    public string Id { get; init; } = string.Empty;
+    public string Estado { get; init; } = string.Empty;
+    public string MetodoPago { get; init; } = string.Empty;
+    public decimal Total { get; init; }
+    public decimal? MontoRecibido { get; init; }
+    public decimal? Cambio { get; init; }
+    public string? MotivoReembolso { get; init; }
 }
 
 public sealed class ProductoCajaViewModel
