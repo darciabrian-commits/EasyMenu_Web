@@ -347,8 +347,6 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
         if (elemento.ValueKind == JsonValueKind.Object
             && ObtenerTexto(elemento, "id") is { } id
             && ObtenerTexto(elemento, "nombre") is { } nombre
-            && ObtenerTexto(elemento, "descripcion") is { } descripcion
-            && ObtenerTexto(elemento, "categoria") is { } categoria
             && ObtenerDecimal(elemento, "precio") is { } precio
             && ObtenerBooleano(elemento, "disponible") is { } disponible)
         {
@@ -356,8 +354,8 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
             {
                 Id = id,
                 Nombre = nombre,
-                Descripcion = descripcion,
-                Categoria = categoria,
+                Descripcion = ObtenerTexto(elemento, "descripcion") ?? string.Empty,
+                Categoria = ObtenerTexto(elemento, "categoria") ?? "Sin categoría",
                 Precio = precio,
                 Disponible = disponible
             };
