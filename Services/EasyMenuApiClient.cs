@@ -96,6 +96,87 @@ public sealed class EasyMenuApiClient(HttpClient httpClient)
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await httpClient.SendAsync(request, cancellationToken);
     }
+
+    public async Task<HttpResponseMessage> ObtenerProductosAsync(
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "productos");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ObtenerProductoAsync(
+        string id,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"productos/{Uri.EscapeDataString(id)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> CrearProductoAsync(
+        string nombre,
+        string descripcion,
+        decimal precio,
+        string categoria,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "productos")
+        {
+            Content = JsonContent.Create(new { nombre, descripcion, precio, categoria })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ActualizarProductoAsync(
+        string id,
+        string nombre,
+        string descripcion,
+        decimal precio,
+        string categoria,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"productos/{Uri.EscapeDataString(id)}")
+        {
+            Content = JsonContent.Create(new { nombre, descripcion, precio, categoria })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> CambiarDisponibilidadProductoAsync(
+        string id,
+        bool disponible,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"productos/{Uri.EscapeDataString(id)}/disponibilidad?disponible={disponible.ToString().ToLowerInvariant()}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> EliminarProductoAsync(
+        string id,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"productos/{Uri.EscapeDataString(id)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
 }
 
 public sealed class LoginResponse

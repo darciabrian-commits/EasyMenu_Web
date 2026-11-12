@@ -1,0 +1,72 @@
+@{
+    ViewData["Title"] = "Productos";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <a asp-controller="Admin" asp-action="Index" class="text-decoration-none">&larr; Administración</a>
+        <h1 class="mt-2 mb-0">Productos</h1>
+    </div>
+    <a class="btn btn-primary" asp-controller="Admin" asp-action="NuevoProducto">Nuevo producto</a>
+</div>
+
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="alert alert-success" role="status">@mensajeExito</div>
+}
+@if (TempData["MensajeError"] is string mensajeError)
+{
+    <div class="alert alert-danger" role="alert">@mensajeError</div>
+}
+
+<div id="lista-productos" aria-live="polite">
+    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <span>Cargando productos...</span>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const listaProductos = document.getElementById("lista-productos");
+
+        async function cargarProductos() {
+            try {
+                const respuesta = await fetch('@Url.Action("ListaProductos", "Admin")', {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar los productos.");
+                listaProductos.innerHTML = await respuesta.text();
+            } catch (error) {
+                listaProductos.innerHTML = "";
+                const alerta = document.createElement("div");
+                alerta.className = "alert alert-danger";
+                alerta.setAttribute("role", "alert");
+                alerta.textContent = error.message || "No fue posible cargar los productos.";
+                listaProductos.appendChild(alerta);
+            }
+        }
+
+        listaProductos.addEventListener("click", evento => {
+            const enlace = evento.target.closest("a[data-cargando]");
+            if (!enlace) return;
+            enlace.classList.add("disabled");
+            enlace.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Cargando...';
+        });
+
+        listaProductos.addEventListener("submit", evento => {
+            const formulario = evento.target.closest("form[data-cargando]");
+            if (!formulario) return;
+            const boton = formulario.querySelector("button[type='submit']");
+            if (!boton) return;
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Procesando...';
+        });
+
+        cargarProductos();
+    </script>
+}
