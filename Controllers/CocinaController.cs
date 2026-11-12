@@ -207,6 +207,7 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
 
     private static PedidoCocinaViewModel ConvertirPedido(JsonElement pedido)
     {
+        var clienteOMesa = ObtenerTexto(pedido, "clienteOMesa");
         var cliente = ObtenerTexto(pedido, "clienteNombre", "nombreCliente", "cliente");
         var mesa = ObtenerTexto(pedido, "mesaNombre", "numeroMesa", "mesa");
         var productos = ObtenerPropiedad(pedido, "productos", out var listaProductos)
@@ -219,7 +220,7 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
         {
             Id = ObtenerTexto(pedido, "id") ?? string.Empty,
             CodigoCorto = ObtenerTexto(pedido, "codigoCorto", "codigo", "codigoPedido") ?? "Pedido",
-            ClienteOMesa = string.Join(" · ", new[]
+            ClienteOMesa = clienteOMesa ?? string.Join(" · ", new[]
             {
                 string.IsNullOrWhiteSpace(cliente) ? null : $"Cliente: {cliente}",
                 string.IsNullOrWhiteSpace(mesa) ? null : $"Mesa: {mesa}"
