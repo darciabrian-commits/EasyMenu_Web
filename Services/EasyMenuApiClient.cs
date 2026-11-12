@@ -32,6 +32,39 @@ public sealed class EasyMenuApiClient(HttpClient httpClient)
         return await httpClient.SendAsync(request, cancellationToken);
     }
 
+    public async Task<HttpResponseMessage> ObtenerPedidosAsync(
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "pedidos");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ObtenerPedidoAsync(
+        string id,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"pedidos/{Uri.EscapeDataString(id)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> CancelarPedidoAsync(
+        string id,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"pedidos/{Uri.EscapeDataString(id)}/cancelar");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
     public async Task<HttpResponseMessage> ObtenerPedidoPorCodigoAsync(
         string codigoCorto,
         string token,

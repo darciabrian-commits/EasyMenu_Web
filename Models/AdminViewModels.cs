@@ -8,6 +8,34 @@ public sealed class ProductosAdminViewModel
     public string? Mensaje { get; init; }
 }
 
+public sealed class PedidosAdminViewModel
+{
+    public List<PedidoAdminViewModel> Pedidos { get; init; } = [];
+    public string? Estado { get; init; }
+    public string? Mensaje { get; init; }
+}
+
+public sealed class PedidoAdminViewModel
+{
+    public string Id { get; init; } = string.Empty;
+    public string CodigoCorto { get; init; } = string.Empty;
+    public string ClienteOMesa { get; init; } = string.Empty;
+    public string Estado { get; init; } = string.Empty;
+    public decimal Total { get; init; }
+    public DateTime? FechaHora { get; init; }
+    public List<ProductoPedidoAdminViewModel> Productos { get; init; } = [];
+    public string? Mensaje { get; init; }
+}
+
+public sealed class ProductoPedidoAdminViewModel
+{
+    public string Nombre { get; init; } = string.Empty;
+    public string Cantidad { get; init; } = string.Empty;
+    public decimal PrecioUnitario { get; init; }
+    public decimal Subtotal { get; init; }
+    public string? Notas { get; init; }
+}
+
 public sealed class ProductoAdminViewModel
 {
     public string Id { get; init; } = string.Empty;

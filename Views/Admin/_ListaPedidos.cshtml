@@ -1,0 +1,55 @@
+@model EasyMenu.Web.Models.PedidosAdminViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger" role="alert">@Model.Mensaje</div>
+}
+else if (Model.Pedidos.Count == 0)
+{
+    <p class="text-secondary mb-0">No hay pedidos para mostrar.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">Código</th>
+                    <th scope="col">Cliente o mesa</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col" class="text-end">Total</th>
+                    <th scope="col">Fecha y hora</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var pedido in Model.Pedidos)
+                {
+                    var colorEstado = pedido.Estado switch
+                    {
+                        "PENDIENTE_PAGO" => "text-bg-warning",
+                        "RECIBIDO" => "text-bg-info",
+                        "EN_PREPARACION" => "text-bg-primary",
+                        "LISTO" => "text-bg-success",
+                        "ENTREGADO" => "text-bg-dark",
+                        "CANCELADO" => "text-bg-danger",
+                        "EXPIRADO" => "text-bg-secondary",
+                        _ => "text-bg-secondary"
+                    };
+                    <tr>
+                        <th scope="row">
+                            <a href="#" class="text-decoration-none" data-pedido-id="@pedido.Id">
+                                @pedido.CodigoCorto
+                            </a>
+                        </th>
+                        <td>@pedido.ClienteOMesa</td>
+                        <td><span class="badge @colorEstado">@pedido.Estado</span></td>
+                        <td class="text-end text-nowrap">@pedido.Total.ToString("C2")</td>
+                        <td class="text-nowrap">
+                            @(pedido.FechaHora?.ToString("dd/MM/yyyy HH:mm") ?? "Sin fecha")
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

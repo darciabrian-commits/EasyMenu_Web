@@ -1,0 +1,163 @@
+@{
+    ViewData["Title"] = "Pedidos";
+    var estados = new[]
+    {
+        "PENDIENTE_PAGO",
+        "RECIBIDO",
+        "EN_PREPARACION",
+        "LISTO",
+        "ENTREGADO",
+        "CANCELADO",
+        "EXPIRADO"
+    };
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <a asp-controller="Admin" asp-action="Index" class="text-decoration-none">&larr; Administración</a>
+        <h1 class="mt-2 mb-0">Pedidos</h1>
+    </div>
+    <button id="actualizar-pedidos" class="btn btn-outline-primary" type="button">
+        Actualizar
+    </button>
+</div>
+
+<div class="row g-4">
+    <section class="col-12" aria-label="Lista de pedidos">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label" for="filtro-estado">Filtrar por estado</label>
+                    <select id="filtro-estado" class="form-select" aria-label="Filtrar pedidos por estado">
+                        <option value="">Todos</option>
+                        @foreach (var estado in estados)
+                        {
+                            <option value="@estado">@estado</option>
+                        }
+                    </select>
+                </div>
+                <div id="lista-pedidos" aria-live="polite">
+                    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                        <span>Cargando pedidos...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <section class="col-12" aria-label="Detalle del pedido">
+        <div id="detalle-pedido" aria-live="polite"></div>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        const listaPedidos = document.getElementById("lista-pedidos");
+        const detallePedido = document.getElementById("detalle-pedido");
+        const filtroEstado = document.getElementById("filtro-estado");
+        const urlLista = '@Url.Action("ListaPedidos", "Admin")';
+        const urlDetalle = '@Url.Action("DetallePedido", "Admin")';
+
+        async function cargarPedidos() {
+            listaPedidos.innerHTML = `
+                <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>Cargando pedidos...</span>
+                </div>`;
+            const parametros = new URLSearchParams();
+            if (filtroEstado.value) parametros.set("estado", filtroEstado.value);
+
+            try {
+                const respuesta = await fetch(`${urlLista}?${parametros}`, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar los pedidos.");
+                listaPedidos.innerHTML = await respuesta.text();
+            } catch (error) {
+                mostrarError(listaPedidos, error.message || "No fue posible cargar los pedidos.");
+            }
+        }
+
+        async function mostrarDetalle(id) {
+            detallePedido.innerHTML = `
+                <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>Cargando detalle...</span>
+                </div>`;
+            const parametros = new URLSearchParams({ id });
+
+            try {
+                const respuesta = await fetch(`${urlDetalle}?${parametros}`, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar el detalle del pedido.");
+                detallePedido.innerHTML = await respuesta.text();
+            } catch (error) {
+                mostrarError(detallePedido, error.message || "No fue posible cargar el detalle del pedido.");
+            }
+        }
+
+        function mostrarError(contenedor, mensaje) {
+            contenedor.innerHTML = "";
+            const alerta = document.createElement("div");
+            alerta.className = "alert alert-danger";
+            alerta.setAttribute("role", "alert");
+            alerta.textContent = mensaje;
+            contenedor.appendChild(alerta);
+        }
+
+        filtroEstado.addEventListener("change", cargarPedidos);
+        document.getElementById("actualizar-pedidos").addEventListener("click", cargarPedidos);
+
+        listaPedidos.addEventListener("click", evento => {
+            const enlace = evento.target.closest("a[data-pedido-id]");
+            if (!enlace) return;
+            evento.preventDefault();
+            mostrarDetalle(enlace.dataset.pedidoId);
+        });
+
+        detallePedido.addEventListener("submit", async evento => {
+            const formulario = evento.target.closest("form[data-cancelar-pedido]");
+            if (!formulario) return;
+            evento.preventDefault();
+            if (!confirm("¿Seguro que deseas cancelar este pedido?")) return;
+
+            const boton = formulario.querySelector("button[type='submit']");
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Cancelando...';
+            try {
+                const respuesta = await fetch(formulario.action, {
+                    method: "POST",
+                    body: new FormData(formulario),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                const resultado = await respuesta.json();
+                if (!respuesta.ok) throw new Error(resultado.mensaje || "No fue posible cancelar el pedido.");
+                await cargarPedidos();
+                await mostrarDetalle(formulario.dataset.pedidoId);
+            } catch (error) {
+                const alerta = document.createElement("div");
+                alerta.className = "alert alert-danger mt-3";
+                alerta.setAttribute("role", "alert");
+                alerta.textContent = error.message || "No fue posible cancelar el pedido.";
+                formulario.insertAdjacentElement("beforebegin", alerta);
+                boton.disabled = false;
+                boton.textContent = "Cancelar";
+            }
+        });
+
+        cargarPedidos();
+    </script>
+}

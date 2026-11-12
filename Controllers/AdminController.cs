@@ -16,6 +16,210 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
     public IActionResult Productos() => View();
 
     [HttpGet]
+    public IActionResult Pedidos() => View();
+
+    [HttpGet]
+    public async Task<IActionResult> ListaPedidos(string? estado, CancellationToken cancellationToken)
+    {
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        estado = string.IsNullOrWhiteSpace(estado) ? null : estado.Trim().ToUpperInvariant();
+        if (estado is not null && !EstadosPedido.Contains(estado, StringComparer.Ordinal))
+        {
+            return PartialView("_ListaPedidos", new PedidosAdminViewModel
+            {
+                Mensaje = "El estado seleccionado no es válido."
+            });
+        }
+
+        try
+        {
+            using var response = estado is null
+                ? await apiClient.ObtenerPedidosAsync(token, cancellationToken)
+                : await apiClient.ObtenerPedidosPorEstadoAsync(estado, token, cancellationToken);
+
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return PartialView("_ListaPedidos", new PedidosAdminViewModel
+                {
+                    Estado = estado,
+                    Mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (!IntentarObtenerPedidosAdmin(documento.RootElement, out var pedidos))
+            {
+                return PartialView("_ListaPedidos", new PedidosAdminViewModel
+                {
+                    Estado = estado,
+                    Mensaje = "La respuesta de pedidos no tiene un formato válido."
+                });
+            }
+
+            return PartialView("_ListaPedidos", new PedidosAdminViewModel
+            {
+                Estado = estado,
+                Pedidos = pedidos
+                    .Select(pedido => ConvertirPedidoAdmin(pedido))
+                    .OrderByDescending(pedido => pedido.FechaHora ?? DateTime.MinValue)
+                    .ToList()
+            });
+        }
+        catch (HttpRequestException)
+        {
+            return PartialView("_ListaPedidos", new PedidosAdminViewModel
+            {
+                Estado = estado,
+                Mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return PartialView("_ListaPedidos", new PedidosAdminViewModel
+            {
+                Estado = estado,
+                Mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+        catch (JsonException)
+        {
+            return PartialView("_ListaPedidos", new PedidosAdminViewModel
+            {
+                Estado = estado,
+                Mensaje = "La respuesta de pedidos no tiene un formato válido."
+            });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> DetallePedido(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return PartialView("_DetallePedido", new PedidoAdminViewModel
+            {
+                Mensaje = "No se indicó el pedido que deseas consultar."
+            });
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.ObtenerPedidoAsync(id, token, cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return PartialView("_DetallePedido", new PedidoAdminViewModel
+                {
+                    Mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (!IntentarObtenerPedidoAdmin(documento.RootElement, id, out var pedido))
+            {
+                return PartialView("_DetallePedido", new PedidoAdminViewModel
+                {
+                    Mensaje = "La respuesta del pedido no tiene un formato válido."
+                });
+            }
+
+            return PartialView("_DetallePedido", pedido);
+        }
+        catch (HttpRequestException)
+        {
+            return PartialView("_DetallePedido", new PedidoAdminViewModel
+            {
+                Mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return PartialView("_DetallePedido", new PedidoAdminViewModel
+            {
+                Mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+        catch (JsonException)
+        {
+            return PartialView("_DetallePedido", new PedidoAdminViewModel
+            {
+                Mensaje = "La respuesta del pedido no tiene un formato válido."
+            });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelarPedido(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { mensaje = "No se indicó el pedido que deseas cancelar." });
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.CancelarPedidoAsync(id, token, cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode((int)response.StatusCode, new
+                {
+                    mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            return Ok(new { mensaje = "El pedido se canceló correctamente." });
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode((int)HttpStatusCode.ServiceUnavailable, new
+            {
+                mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return StatusCode((int)HttpStatusCode.ServiceUnavailable, new
+            {
+                mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+    }
+
+    [HttpGet]
     public async Task<IActionResult> ListaProductos(CancellationToken cancellationToken)
     {
         var token = HttpContext.Session.GetString("Token");
@@ -434,5 +638,212 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
 
         valor = default;
         return false;
+    }
+
+    private static readonly string[] EstadosPedido =
+    [
+        "PENDIENTE_PAGO",
+        "RECIBIDO",
+        "EN_PREPARACION",
+        "LISTO",
+        "ENTREGADO",
+        "CANCELADO",
+        "EXPIRADO"
+    ];
+
+    private static bool IntentarObtenerPedidosAdmin(JsonElement elemento, out List<JsonElement> pedidos)
+    {
+        if (elemento.ValueKind == JsonValueKind.Array)
+        {
+            pedidos = elemento.EnumerateArray().ToList();
+            return pedidos.All(pedido => pedido.ValueKind == JsonValueKind.Object);
+        }
+
+        if (elemento.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var nombre in new[] { "pedidos", "content", "data", "results", "resultado" })
+            {
+                if (ObtenerPropiedad(elemento, nombre, out var contenido)
+                    && IntentarObtenerPedidosAdmin(contenido, out pedidos))
+                {
+                    return true;
+                }
+            }
+
+            if (ObtenerPropiedad(elemento, "id", out _))
+            {
+                pedidos = [elemento];
+                return true;
+            }
+        }
+
+        pedidos = [];
+        return false;
+    }
+
+    private static bool IntentarObtenerPedidoAdmin(
+        JsonElement elemento,
+        string id,
+        out PedidoAdminViewModel pedido)
+    {
+        foreach (var nombre in new[] { "pedido", "data", "resultado" })
+        {
+            if (ObtenerPropiedad(elemento, nombre, out var contenido)
+                && contenido.ValueKind == JsonValueKind.Object)
+            {
+                elemento = contenido;
+                break;
+            }
+        }
+
+        if (elemento.ValueKind != JsonValueKind.Object)
+        {
+            pedido = new PedidoAdminViewModel();
+            return false;
+        }
+
+        pedido = ConvertirPedidoAdmin(elemento, id);
+        return true;
+    }
+
+    private static PedidoAdminViewModel ConvertirPedidoAdmin(JsonElement elemento, string? idFallback = null)
+    {
+        var elementosProductos = ObtenerPropiedad(elemento, "productos", out var productos)
+            || ObtenerPropiedad(elemento, "detalles", out productos)
+            || ObtenerPropiedad(elemento, "items", out productos)
+                ? productos.ValueKind == JsonValueKind.Array
+                    ? productos.EnumerateArray().ToList()
+                    : []
+                : [];
+        var listaProductos = elementosProductos
+            .Where(producto => producto.ValueKind == JsonValueKind.Object)
+            .Select(ConvertirProductoPedidoAdmin)
+            .ToList();
+        var total = ObtenerDecimal(elemento, "total")
+            ?? ObtenerDecimal(elemento, "montoTotal")
+            ?? ObtenerDecimal(elemento, "totalPedido")
+            ?? ObtenerDecimal(elemento, "importeTotal")
+            ?? listaProductos.Sum(producto => producto.Subtotal);
+
+        return new PedidoAdminViewModel
+        {
+            Id = ObtenerTexto(elemento, "id")
+                ?? ObtenerTexto(elemento, "pedidoId")
+                ?? idFallback
+                ?? string.Empty,
+            CodigoCorto = ObtenerTexto(elemento, "codigoCorto")
+                ?? ObtenerTexto(elemento, "codigo")
+                ?? ObtenerTexto(elemento, "codigoPedido")
+                ?? "Pedido",
+            ClienteOMesa = ObtenerClienteOMesaAdmin(elemento),
+            Estado = (ObtenerTexto(elemento, "estado") ?? string.Empty).ToUpperInvariant(),
+            Total = total,
+            FechaHora = ObtenerFechaHoraElSalvador(elemento),
+            Productos = listaProductos
+        };
+    }
+
+    private static ProductoPedidoAdminViewModel ConvertirProductoPedidoAdmin(JsonElement elemento)
+    {
+        var detalle = elemento;
+        var nombre = ObtenerTexto(detalle, "nombreProducto")
+            ?? ObtenerTexto(detalle, "productoNombre")
+            ?? ObtenerTexto(detalle, "nombre");
+        if (ObtenerPropiedad(detalle, "producto", out var producto))
+        {
+            nombre ??= producto.ValueKind == JsonValueKind.String
+                ? producto.GetString()
+                : ObtenerTexto(producto, "nombre");
+        }
+
+        var cantidad = ObtenerTexto(detalle, "cantidad")
+            ?? ObtenerTexto(detalle, "quantity")
+            ?? "1";
+        var precioUnitario = ObtenerDecimal(detalle, "precioUnitario")
+            ?? ObtenerDecimal(detalle, "precio")
+            ?? ObtenerDecimal(detalle, "price")
+            ?? 0m;
+        var subtotal = ObtenerDecimal(detalle, "subtotal")
+            ?? ObtenerDecimal(detalle, "subTotal")
+            ?? (decimal.TryParse(
+                    cantidad,
+                    System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var cantidadNumerica)
+                ? precioUnitario * cantidadNumerica
+                : precioUnitario);
+
+        return new ProductoPedidoAdminViewModel
+        {
+            Nombre = nombre ?? "Producto",
+            Cantidad = cantidad,
+            PrecioUnitario = precioUnitario,
+            Subtotal = subtotal,
+            Notas = ObtenerTexto(detalle, "notas")
+                ?? ObtenerTexto(detalle, "nota")
+                ?? ObtenerTexto(detalle, "observaciones")
+                ?? ObtenerTexto(detalle, "comentario")
+        };
+    }
+
+    private static string ObtenerClienteOMesaAdmin(JsonElement pedido)
+    {
+        var clienteOMesa = ObtenerTexto(pedido, "clienteOMesa");
+        if (!string.IsNullOrWhiteSpace(clienteOMesa))
+        {
+            return clienteOMesa;
+        }
+
+        var cliente = ObtenerTexto(pedido, "clienteNombre")
+            ?? ObtenerTexto(pedido, "nombreCliente")
+            ?? ObtenerTextoAnidado(pedido, "cliente");
+        var mesa = ObtenerTexto(pedido, "mesaNombre")
+            ?? ObtenerTexto(pedido, "numeroMesa")
+            ?? ObtenerTextoAnidado(pedido, "mesa");
+        var partes = new[]
+        {
+            string.IsNullOrWhiteSpace(cliente) ? null : $"Cliente: {cliente}",
+            string.IsNullOrWhiteSpace(mesa) ? null : $"Mesa: {mesa}"
+        }.Where(parte => parte is not null);
+        var resultado = string.Join(" · ", partes);
+        return string.IsNullOrWhiteSpace(resultado) ? "Sin dato" : resultado;
+    }
+
+    private static string? ObtenerTextoAnidado(JsonElement elemento, string nombre)
+    {
+        if (!ObtenerPropiedad(elemento, nombre, out var valor))
+        {
+            return null;
+        }
+
+        if (valor.ValueKind == JsonValueKind.Object)
+        {
+            return ObtenerTexto(valor, "nombre")
+                ?? ObtenerTexto(valor, "numero")
+                ?? ObtenerTexto(valor, "nombreCompleto");
+        }
+
+        return ObtenerTexto(elemento, nombre);
+    }
+
+    private static DateTime? ObtenerFechaHoraElSalvador(JsonElement pedido)
+    {
+        var fechaTexto = ObtenerTexto(pedido, "fechaHora")
+            ?? ObtenerTexto(pedido, "fechaCreacion")
+            ?? ObtenerTexto(pedido, "fecha")
+            ?? ObtenerTexto(pedido, "createdAt")
+            ?? ObtenerTexto(pedido, "fechaPedido");
+        if (!DateTime.TryParse(
+                fechaTexto,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal
+                    | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var fechaUtc))
+        {
+            return null;
+        }
+
+        var zonaElSalvador = TimeZoneInfo.FindSystemTimeZoneById("America/El_Salvador");
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(fechaUtc, DateTimeKind.Utc), zonaElSalvador);
     }
 }
