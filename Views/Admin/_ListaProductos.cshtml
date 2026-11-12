@@ -47,7 +47,7 @@ else
                                    asp-controller="Admin" asp-action="EditarProducto" asp-route-id="@producto.Id">Editar</a>
                                 <form asp-controller="Admin" asp-action="CambiarDisponibilidad" method="post" data-cargando>
                                     <input type="hidden" name="id" value="@producto.Id" />
-                                    <input type="hidden" name="disponible" value="@(!producto.Disponible).ToString().ToLowerInvariant()" />
+                                    <input type="hidden" name="disponible" value="@((!producto.Disponible).ToString().ToLowerInvariant())" />
                                     <button class="btn btn-sm btn-outline-secondary" type="submit">
                                         @(producto.Disponible ? "No disponible" : "Disponible")
                                     </button>
