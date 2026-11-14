@@ -22,7 +22,7 @@ else
                     {
                         <li class="list-group-item px-0 d-flex justify-content-between gap-3">
                             <span>@producto.Cantidad × @producto.Nombre</span>
-                            <span class="text-nowrap">@producto.Subtotal.ToString("C2")</span>
+                            <span class="text-nowrap">@producto.Subtotal.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</span>
                         </li>
                     }
                 </ul>
@@ -36,7 +36,7 @@ else
                 <dt class="col-5">Estado</dt>
                 <dd class="col-7">@Model.Estado</dd>
                 <dt class="col-5">Total</dt>
-                <dd class="col-7 fw-bold">@Model.Total.ToString("C2")</dd>
+                <dd class="col-7 fw-bold">@Model.Total.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd>
             </dl>
 
             @if (Model.Estado == "PENDIENTE_PAGO")
@@ -85,11 +85,11 @@ else
                         <dt class="col-5">Método</dt>
                         <dd class="col-7">@Model.Pago.MetodoPago</dd>
                         <dt class="col-5">Total</dt>
-                        <dd class="col-7">@Model.Pago.Total.ToString("C2")</dd>
+                        <dd class="col-7">@Model.Pago.Total.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd>
                         <dt class="col-5">Recibido</dt>
-                        <dd class="col-7">@(Model.Pago.MontoRecibido?.ToString("C2") ?? "No aplica")</dd>
+                        <dd class="col-7">@(Model.Pago.MontoRecibido?.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US")) ?? "No aplica")</dd>
                         <dt class="col-5">Cambio</dt>
-                        <dd class="col-7">@(Model.Pago.Cambio?.ToString("C2") ?? "No aplica")</dd>
+                        <dd class="col-7">@(Model.Pago.Cambio?.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US")) ?? "No aplica")</dd>
                     </dl>
 
                     @if (Model.Pago.Estado == "COMPLETADO")

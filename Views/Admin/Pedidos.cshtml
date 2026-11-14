@@ -45,15 +45,28 @@
             </div>
         </div>
     </section>
-    <section class="col-12" aria-label="Detalle del pedido">
-        <div id="detalle-pedido" aria-live="polite"></div>
-    </section>
+</div>
+
+<div class="modal fade" id="modal-detalle-pedido" tabindex="-1" aria-labelledby="modal-detalle-pedido-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="modal-detalle-pedido-titulo">Detalle del pedido</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="detalle-pedido" aria-live="polite"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
     <script>
         const listaPedidos = document.getElementById("lista-pedidos");
         const detallePedido = document.getElementById("detalle-pedido");
+        const modalDetallePedido = bootstrap.Modal.getOrCreateInstance(document.getElementById("modal-detalle-pedido"));
         const filtroEstado = document.getElementById("filtro-estado");
         const urlLista = '@Url.Action("ListaPedidos", "Admin")';
         const urlDetalle = '@Url.Action("DetallePedido", "Admin")';
@@ -83,6 +96,7 @@
         }
 
         async function mostrarDetalle(id) {
+            modalDetallePedido.show();
             detallePedido.innerHTML = `
                 <div class="d-flex align-items-center gap-2 text-secondary" role="status">
                     <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>

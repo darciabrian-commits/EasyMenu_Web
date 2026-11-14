@@ -29,7 +29,7 @@ else
                         <td>@producto.Nombre</td>
                         <td>@producto.Descripcion</td>
                         <td>@producto.Categoria</td>
-                        <td>@producto.Precio.ToString("C")</td>
+                        <td>@producto.Precio.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</td>
                         <td>
                             @if (producto.Disponible)
                             {

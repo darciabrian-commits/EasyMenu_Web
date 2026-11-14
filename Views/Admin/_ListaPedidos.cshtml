@@ -43,7 +43,7 @@ else
                         </th>
                         <td>@pedido.ClienteOMesa</td>
                         <td><span class="badge @colorEstado">@pedido.Estado</span></td>
-                        <td class="text-end text-nowrap">@pedido.Total.ToString("C2")</td>
+                        <td class="text-end text-nowrap">@pedido.Total.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</td>
                         <td class="text-nowrap">
                             @(pedido.FechaHora?.ToString("dd/MM/yyyy HH:mm") ?? "Sin fecha")
                         </td>

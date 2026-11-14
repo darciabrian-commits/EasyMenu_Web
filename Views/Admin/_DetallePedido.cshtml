@@ -34,8 +34,8 @@ else
                                 <tr>
                                     <th scope="row">@producto.Nombre</th>
                                     <td class="text-end">@producto.Cantidad</td>
-                                    <td class="text-end text-nowrap">@producto.PrecioUnitario.ToString("C2")</td>
-                                    <td class="text-end text-nowrap">@producto.Subtotal.ToString("C2")</td>
+                                    <td class="text-end text-nowrap">@producto.PrecioUnitario.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</td>
+                                    <td class="text-end text-nowrap">@producto.Subtotal.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</td>
                                     <td>@(producto.Notas ?? "—")</td>
                                 </tr>
                             }
@@ -48,7 +48,7 @@ else
                 <p class="text-secondary">El pedido no tiene productos.</p>
             }
 
-            <p class="text-end fs-5 mb-0">Total: <strong>@Model.Total.ToString("C2")</strong></p>
+            <p class="text-end fs-5 mb-0">Total: <strong>@Model.Total.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</strong></p>
 
             @if (Model.Estado == "PENDIENTE_PAGO")
             {

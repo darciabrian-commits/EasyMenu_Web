@@ -5,13 +5,13 @@
         <h2 id="titulo-comprobante" class="h4 text-success">Comprobante de pago</h2>
         <dl class="row mb-0">
             <dt class="col-6">Total</dt>
-            <dd class="col-6">@Model.Total.ToString("C2")</dd>
+            <dd class="col-6">@Model.Total.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd>
             <dt class="col-6">Método de pago</dt>
             <dd class="col-6">@Model.MetodoPago</dd>
             <dt class="col-6">Monto recibido</dt>
-            <dd class="col-6">@(Model.MontoRecibido?.ToString("C2") ?? "No aplica")</dd>
+            <dd class="col-6">@(Model.MontoRecibido?.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US")) ?? "No aplica")</dd>
             <dt class="col-6">Cambio</dt>
-            <dd class="col-6">@Model.Cambio.ToString("C2")</dd>
+            <dd class="col-6">@Model.Cambio.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd>
         </dl>
     </div>
 </section>
