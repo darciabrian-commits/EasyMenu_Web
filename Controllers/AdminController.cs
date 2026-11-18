@@ -319,8 +319,7 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
                 Nombre = producto.Nombre,
                 Descripcion = producto.Descripcion,
                 Precio = producto.Precio,
-                Categoria = producto.Categoria,
-                CategoriaOriginal = producto.Categoria
+                Categoria = producto.Categoria
             });
         }
         catch (HttpRequestException)
@@ -346,8 +345,7 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
         ProductoFormularioViewModel modelo,
         CancellationToken cancellationToken)
     {
-        if (!new[] { "PLATILLO", "BEBIDA", "POSTRE" }.Contains(modelo.Categoria, StringComparer.Ordinal)
-            && !(modelo.Id is not null && modelo.Categoria == modelo.CategoriaOriginal))
+        if (!new[] { "PLATILLO", "BEBIDA", "POSTRE" }.Contains(modelo.Categoria, StringComparer.Ordinal))
         {
             ModelState.AddModelError(nameof(modelo.Categoria), "Selecciona una categoría válida.");
         }
@@ -475,6 +473,7 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
 
     private IActionResult IrAlLogin()
     {
+        HttpContext.Session.Clear();
         return RedirectToAction(
             "Login",
             "Account",

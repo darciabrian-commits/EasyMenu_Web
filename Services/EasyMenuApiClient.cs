@@ -1,5 +1,7 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
+using System.Net;
+using System.Text.Json;
 
 namespace EasyMenu.Web.Services;
 
@@ -12,12 +14,14 @@ public sealed class EasyMenuApiClient(HttpClient httpClient)
             new { correo, clave },
             cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized)
         {
             return null;
         }
 
-        return await response.Content.ReadFromJsonAsync<LoginResponse>(cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<LoginResponse>(cancellationToken)
+            ?? throw new JsonException("La respuesta de inicio de sesión está vacía.");
     }
 
     public async Task<HttpResponseMessage> ObtenerPedidosPorEstadoAsync(

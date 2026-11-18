@@ -49,7 +49,6 @@ public sealed class ProductoAdminViewModel
 public sealed class ProductoFormularioViewModel
 {
     public string? Id { get; set; }
-    public string? CategoriaOriginal { get; set; }
 
     [Required(ErrorMessage = "Ingresa el nombre del producto.")]
     [StringLength(100, ErrorMessage = "El nombre no puede superar los 100 caracteres.")]
@@ -63,5 +62,6 @@ public sealed class ProductoFormularioViewModel
     public decimal Precio { get; set; }
 
     [Required(ErrorMessage = "Selecciona una categoría.")]
+    [RegularExpression("^(PLATILLO|BEBIDA|POSTRE)$", ErrorMessage = "Selecciona una categoría válida.")]
     public string Categoria { get; set; } = string.Empty;
 }

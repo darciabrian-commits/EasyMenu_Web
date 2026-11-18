@@ -12,14 +12,17 @@ public sealed class RequireRoleAttribute(params string[] rolesPermitidos) : Acti
         var token = sesion.GetString("Token");
         var rol = sesion.GetString("Rol");
 
-        if (string.IsNullOrEmpty(token))
+        if (string.IsNullOrWhiteSpace(token))
         {
+            sesion.Clear();
             context.Result = new RedirectToActionResult("Login", "Account", null);
             return;
         }
 
-        if (!rolesPermitidos.Contains(rol, StringComparer.Ordinal))
+        if (string.IsNullOrWhiteSpace(rol)
+            || !rolesPermitidos.Contains(rol, StringComparer.Ordinal))
         {
+            sesion.Clear();
             context.Result = new RedirectToActionResult(
                 "Login",
                 "Account",

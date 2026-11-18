@@ -17,7 +17,7 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
         var token = HttpContext.Session.GetString("Token");
         if (string.IsNullOrEmpty(token))
         {
-            return RedirectToAction("Login", "Account");
+            return IrAlLogin();
         }
 
         var estados = new[] { "RECIBIDO", "EN_PREPARACION", "LISTO" };
@@ -28,10 +28,7 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
 
         if (resultados.Any(resultado => resultado.SinAutorizacion))
         {
-            return RedirectToAction(
-                "Login",
-                "Account",
-                new { aviso = "La sesión venció o no tienes permiso. Inicia sesión nuevamente." });
+            return IrAlLogin();
         }
 
         var modelo = new TableroCocinaViewModel
@@ -71,7 +68,7 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
         var token = HttpContext.Session.GetString("Token");
         if (string.IsNullOrEmpty(token))
         {
-            return RedirectToAction("Login", "Account");
+            return IrAlLogin();
         }
 
         try
@@ -85,10 +82,7 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
             if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized
                 or System.Net.HttpStatusCode.Forbidden)
             {
-                return RedirectToAction(
-                    "Login",
-                    "Account",
-                    new { aviso = "La sesión venció o no tienes permiso. Inicia sesión nuevamente." });
+                return IrAlLogin();
             }
 
             if (!response.IsSuccessStatusCode)
@@ -155,6 +149,15 @@ public sealed class CocinaController(EasyMenuApiClient apiClient) : Controller
         {
             return ([], "La respuesta de pedidos no tiene un formato válido.", false);
         }
+    }
+
+    private IActionResult IrAlLogin()
+    {
+        HttpContext.Session.Clear();
+        return RedirectToAction(
+            "Login",
+            "Account",
+            new { aviso = "La sesión venció o no tienes permiso. Inicia sesión nuevamente." });
     }
 
     private static async Task<string> LeerMensajeErrorAsync(

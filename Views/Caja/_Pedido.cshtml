@@ -47,8 +47,6 @@ else
                       data-total="@Model.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="pedidoId" value="@Model.Id" />
-                    <input type="hidden" name="totalPedido"
-                           value="@Model.Total.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
                     <div class="mb-3">
                         <label class="form-label" for="metodo-pago">Método de pago</label>
                         <select id="metodo-pago" name="metodoPago" class="form-select" required>

@@ -167,13 +167,11 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
         string pedidoId,
         string metodoPago,
         decimal? montoRecibido,
-        decimal totalPedido,
         CancellationToken cancellationToken)
     {
         metodoPago = metodoPago?.ToUpperInvariant() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(pedidoId)
-            || metodoPago is not ("EFECTIVO" or "TARJETA" or "TRANSFERENCIA")
-            || (metodoPago == "EFECTIVO" && (!montoRecibido.HasValue || montoRecibido < totalPedido)))
+            || metodoPago is not ("EFECTIVO" or "TARJETA" or "TRANSFERENCIA"))
         {
             return BadRequest(new { mensaje = "Revisa el método de pago y el monto recibido." });
         }
@@ -186,6 +184,72 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
 
         try
         {
+            using var pedidoResponse = await apiClient.ObtenerPedidoAsync(
+                pedidoId,
+                token,
+                cancellationToken);
+
+            if (EsSinAutorizacion(pedidoResponse))
+            {
+                return IrAlLogin();
+            }
+
+            if (!pedidoResponse.IsSuccessStatusCode)
+            {
+                return StatusCode((int)pedidoResponse.StatusCode, new
+                {
+                    mensaje = await LeerMensajeErrorAsync(pedidoResponse, cancellationToken)
+                });
+            }
+
+            await using var pedidoStream = await pedidoResponse.Content.ReadAsStreamAsync(cancellationToken);
+            using var pedidoDocumento = await JsonDocument.ParseAsync(
+                pedidoStream,
+                cancellationToken: cancellationToken);
+            var pedidoJson = BuscarObjeto(pedidoDocumento.RootElement, "pedido")
+                ?? BuscarObjeto(pedidoDocumento.RootElement, "data")
+                ?? pedidoDocumento.RootElement;
+            var pedido = ConvertirPedido(pedidoJson);
+
+            if (string.IsNullOrWhiteSpace(pedido.Id)
+                || !string.Equals(pedido.Id, pedidoId, StringComparison.Ordinal))
+            {
+                return StatusCode((int)HttpStatusCode.BadGateway, new
+                {
+                    mensaje = "La respuesta del pedido no coincide con el pedido solicitado."
+                });
+            }
+
+            if (!string.Equals(pedido.Estado, "PENDIENTE_PAGO", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new { mensaje = "El pedido ya no está pendiente de pago." });
+            }
+
+            if (metodoPago == "EFECTIVO"
+                && (!montoRecibido.HasValue || montoRecibido.Value < pedido.Total))
+            {
+                return BadRequest(new { mensaje = "El monto recibido no puede ser menor que el total del pedido." });
+            }
+
+            var pagoExistente = await ObtenerPagoAsync(pedidoId, token, cancellationToken);
+            if (pagoExistente.SinAutorizacion)
+            {
+                return IrAlLogin();
+            }
+
+            if (pagoExistente.Mensaje is not null)
+            {
+                return StatusCode((int)HttpStatusCode.BadGateway, new
+                {
+                    mensaje = pagoExistente.Mensaje
+                });
+            }
+
+            if (pagoExistente.Pago is not null)
+            {
+                return Conflict(new { mensaje = "El pedido ya tiene un pago registrado." });
+            }
+
             using var response = await apiClient.CobrarPedidoAsync(
                 pedidoId,
                 metodoPago,
@@ -208,20 +272,30 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var datos = BuscarObjeto(documento.RootElement, "pago") ?? documento.RootElement;
-            var totalRespuesta = ObtenerDecimal(datos, "total", "montoTotal", "totalPedido") ?? totalPedido;
-            var montoRespuesta = ObtenerDecimal(datos, "montoRecibido") ?? montoRecibido;
-            var cambio = ObtenerDecimal(datos, "cambio")
-                ?? (metodoPago == "EFECTIVO" && montoRespuesta.HasValue
-                    ? montoRespuesta.Value - totalRespuesta
-                    : 0m);
+            var datos = BuscarObjeto(documento.RootElement, "pago")
+                ?? BuscarObjeto(documento.RootElement, "data")
+                ?? documento.RootElement;
+            if (BuscarObjeto(datos, "pago") is { } pagoAnidado)
+            {
+                datos = pagoAnidado;
+            }
+
+            var totalRespuesta = ObtenerDecimal(datos, "total", "montoTotal", "totalPedido");
+            var cambio = ObtenerDecimal(datos, "cambio");
+            var metodoRespuesta = ObtenerTexto(datos, "metodoPago", "metodo");
+            if (!totalRespuesta.HasValue || !cambio.HasValue || string.IsNullOrWhiteSpace(metodoRespuesta))
+            {
+                throw new JsonException("La respuesta del pago no contiene los datos requeridos.");
+            }
+
+            var montoRespuesta = ObtenerDecimal(datos, "montoRecibido");
 
             return PartialView("_Comprobante", new ComprobanteCajaViewModel
             {
-                Total = totalRespuesta,
-                MetodoPago = metodoPago,
-                MontoRecibido = metodoPago == "EFECTIVO" ? montoRespuesta : null,
-                Cambio = cambio
+                Total = totalRespuesta.Value,
+                MetodoPago = metodoRespuesta,
+                MontoRecibido = montoRespuesta,
+                Cambio = cambio.Value
             });
         }
         catch (HttpRequestException)
@@ -366,6 +440,7 @@ public sealed class CajaController(EasyMenuApiClient apiClient) : Controller
 
     private IActionResult IrAlLogin()
     {
+        HttpContext.Session.Clear();
         return RedirectToAction(
             "Login",
             "Account",

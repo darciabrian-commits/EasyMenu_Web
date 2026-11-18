@@ -1,6 +1,7 @@
 using EasyMenu.Web.Models;
 using EasyMenu.Web.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace EasyMenu.Web.Controllers;
 
@@ -17,6 +18,7 @@ public sealed class AccountController(EasyMenuApiClient apiClient) : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(LoginViewModel model, CancellationToken cancellationToken)
     {
+        HttpContext.Session.Clear();
         if (!ModelState.IsValid)
         {
             return View(model);
@@ -27,9 +29,15 @@ public sealed class AccountController(EasyMenuApiClient apiClient) : Controller
         {
             resultado = await apiClient.IniciarSesionAsync(model.Correo, model.Clave, cancellationToken);
         }
+        catch (HttpRequestException excepcion) when (
+            excepcion.StatusCode is { } estado && (int)estado >= 500)
+        {
+            ModelState.AddModelError(string.Empty, "El servidor de autenticación reportó un error. Inténtalo nuevamente.");
+            return View(model);
+        }
         catch (HttpRequestException)
         {
-            ModelState.AddModelError(string.Empty, "No fue posible conectar con el servidor. Inténtalo nuevamente.");
+            ModelState.AddModelError(string.Empty, "No fue posible completar el inicio de sesión. Inténtalo nuevamente.");
             return View(model);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -37,10 +45,23 @@ public sealed class AccountController(EasyMenuApiClient apiClient) : Controller
             ModelState.AddModelError(string.Empty, "El servidor tardó demasiado en responder. Inténtalo nuevamente.");
             return View(model);
         }
+        catch (JsonException)
+        {
+            ModelState.AddModelError(string.Empty, "La respuesta del servidor no tiene un formato válido.");
+            return View(model);
+        }
 
-        if (string.IsNullOrWhiteSpace(resultado?.Token) || string.IsNullOrWhiteSpace(resultado.Rol))
+        if (resultado is null)
         {
             ViewBag.ErrorLogin = "Correo o clave incorrectos";
+            return View(model);
+        }
+
+        if (string.IsNullOrWhiteSpace(resultado.Token)
+            || !string.Equals(resultado.Tipo, "Bearer", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(resultado.Rol))
+        {
+            ModelState.AddModelError(string.Empty, "La respuesta del servidor no contiene datos de sesión válidos.");
             return View(model);
         }
 
@@ -54,7 +75,7 @@ public sealed class AccountController(EasyMenuApiClient apiClient) : Controller
 
         if (destino is null)
         {
-            ViewBag.ErrorLogin = "Correo o clave incorrectos";
+            ViewBag.ErrorLogin = "El servidor devolvió un rol no válido.";
             return View(model);
         }
 
