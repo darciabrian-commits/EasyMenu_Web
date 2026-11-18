@@ -1,0 +1,19 @@
+@model MesaDetalleViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger mb-0" role="alert">@Model.Mensaje</div>
+}
+else if (Model.Mesa is not null)
+{
+    <dl class="row mb-0">
+        <dt class="col-sm-5">Número de mesa</dt>
+        <dd class="col-sm-7">@Model.Mesa.Numero</dd>
+        <dt class="col-sm-5">Capacidad</dt>
+        <dd class="col-sm-7">@Model.Mesa.Capacidad personas</dd>
+        <dt class="col-sm-5">Estado</dt>
+        <dd class="col-sm-7">@(Model.Mesa.Activa ? "Activa" : "Inactiva")</dd>
+        <dt class="col-sm-5">Fecha de creación</dt>
+        <dd class="col-sm-7">@Model.Mesa.FechaCreacion.ToLocalTime().ToString("g")</dd>
+    </dl>
+}

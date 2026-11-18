@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
+using System.ComponentModel.DataAnnotations;
 using EasyMenu.Web.Controllers;
 using EasyMenu.Web.Filters;
 using EasyMenu.Web.Models;
@@ -10,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -19,6 +21,13 @@ await Ejecutar("Reservas usa rutas, métodos, DTO y autenticación de servicio",
 await Ejecutar("Reservas convierte errores HTTP y JSON inválido en resultados controlados", ReservasClienteManejaErroresHttp);
 await Ejecutar("Reservas no envía solicitudes sin configuración válida", ReservasClienteExigeConfiguracion);
 await Ejecutar("Reservas controla errores de conexión y timeout", ReservasClienteManejaErroresDeTransporte);
+await Ejecutar("mesas lista y consulta por identificador mediante Reservas", MesasListaYConsulta);
+await Ejecutar("mesas crea y edita con el contrato completo", MesasCreaYEdita);
+await Ejecutar("mesas activa y desactiva mediante PUT con estado vigente", MesasCambiaEstadoMediantePut);
+await Ejecutar("mesas rechaza datos inválidos y conserva el formulario", MesasRechazaDatosInvalidos);
+await Ejecutar("mesas muestra errores 400, 404 y 409 sin perder los datos", MesasManejaErroresHttp);
+await Ejecutar("mesas conserva la sesión ante errores 401 y 403 de Reservas", MesasConservaSesionAnteErroresDeReservas);
+await Ejecutar("mesas permite consulta a los tres roles y limita modificaciones", MesasProtegePorRol);
 await Ejecutar("el resumen consulta por fecha y deserializa todos sus campos", ResumenVentasConsultaFechaYDeserializaCampos);
 await Ejecutar("el resumen muestra los errores HTTP de la API", ResumenVentasMuestraErrorHttp);
 await Ejecutar("las acciones de administración son exclusivas del administrador", AdminRechazaRolesNoPermitidos);
@@ -53,6 +62,283 @@ async Task Ejecutar(string nombre, Func<Task> prueba)
         fallos++;
         Console.Error.WriteLine($"FAIL {nombre}: {excepcion.Message}");
     }
+}
+
+static async Task MesasListaYConsulta()
+{
+    const string mesaJson = """
+        {"id":12,"numero":8,"capacidad":4,"activa":true,"fechaCreacion":"2026-01-02T03:04:05Z"}
+        """;
+    var rutas = new List<string>();
+    var cliente = CrearClienteReservas((request, _) =>
+    {
+        rutas.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+        return Task.FromResult(JsonResponse(HttpStatusCode.OK, request.RequestUri.AbsolutePath switch
+        {
+            "/api/Mesas" => $"[{mesaJson}]",
+            "/api/Mesas/12" => mesaJson,
+            _ => throw new InvalidOperationException($"Ruta inesperada: {request.RequestUri}")
+        }));
+    });
+    var controller = CrearMesasController(cliente);
+
+    var listado = await controller.ListaMesas(CancellationToken.None);
+    var listadoParcial = listado as PartialViewResult;
+    var modeloListado = listadoParcial?.Model as MesasAdminViewModel;
+    Verificar(listadoParcial?.ViewName == "_ListaMesas" && modeloListado?.Mesas.Count == 1,
+        $"No se devolvió el listado deserializado de mesas ({listadoParcial?.ViewName}, {modeloListado?.Mensaje}, {modeloListado?.Mesas.Count}).");
+
+    var detalle = await controller.Detalle(12, CancellationToken.None);
+    var detalleParcial = detalle as PartialViewResult;
+    var modeloDetalle = detalleParcial?.Model as MesaDetalleViewModel;
+    Verificar(detalleParcial?.ViewName == "_DetalleMesa" && modeloDetalle?.Mesa?.Id == 12,
+        $"No se devolvió el detalle deserializado de la mesa ({detalleParcial?.ViewName}, {modeloDetalle?.Mensaje}, {modeloDetalle?.Mesa?.Id}).");
+    Verificar(rutas.SequenceEqual(["GET /api/Mesas", "GET /api/Mesas/12"]),
+        "El listado o detalle no usó la ruta GET correspondiente.");
+}
+
+static async Task MesasCreaYEdita()
+{
+    const string mesaJson = """
+        {"id":12,"numero":8,"capacidad":5,"activa":false,"fechaCreacion":"2026-01-02T03:04:05Z"}
+        """;
+    var solicitudes = new List<(HttpMethod Metodo, string Ruta, string Cuerpo)>();
+    var cliente = CrearClienteReservas(async (request, cancellationToken) =>
+    {
+        var cuerpo = await request.Content!.ReadAsStringAsync(cancellationToken);
+        solicitudes.Add((request.Method, request.RequestUri!.AbsolutePath, cuerpo));
+        return JsonResponse(request.Method == HttpMethod.Post ? HttpStatusCode.Created : HttpStatusCode.OK, mesaJson);
+    });
+    var controller = CrearMesasController(cliente);
+
+    var crear = await controller.Crear(new MesaFormularioViewModel { Numero = 8, Capacidad = 4 }, CancellationToken.None);
+    var editar = await controller.Editar(12, new MesaFormularioViewModel
+    {
+        Numero = 8,
+        Capacidad = 5,
+        Activa = false
+    }, CancellationToken.None);
+
+    Verificar(crear is RedirectToActionResult { ActionName: nameof(MesasController.Index) }
+        && editar is RedirectToActionResult { ActionName: nameof(MesasController.Index) },
+        "La creación o edición correcta no regresó al listado.");
+    Verificar(solicitudes.Select(solicitud => (solicitud.Metodo, solicitud.Ruta))
+        .SequenceEqual([(HttpMethod.Post, "/api/Mesas"), (HttpMethod.Put, "/api/Mesas/12")]),
+        "La creación o edición no usó el método y la ruta del contrato.");
+    using var createJson = JsonDocument.Parse(solicitudes[0].Cuerpo);
+    Verificar(createJson.RootElement.EnumerateObject().Select(propiedad => propiedad.Name)
+            .ToHashSet(StringComparer.Ordinal).SetEquals(["numero", "capacidad"])
+        && createJson.RootElement.GetProperty("numero").GetInt32() == 8
+        && createJson.RootElement.GetProperty("capacidad").GetInt32() == 4,
+        "La creación envió campos extra o datos incorrectos.");
+    using var updateJson = JsonDocument.Parse(solicitudes[1].Cuerpo);
+    Verificar(updateJson.RootElement.EnumerateObject().Select(propiedad => propiedad.Name)
+            .ToHashSet(StringComparer.Ordinal).SetEquals(["numero", "capacidad", "activa"])
+        && updateJson.RootElement.GetProperty("numero").GetInt32() == 8
+        && updateJson.RootElement.GetProperty("capacidad").GetInt32() == 5
+        && !updateJson.RootElement.GetProperty("activa").GetBoolean(),
+        "La edición no envió el DTO completo de actualización.");
+}
+
+static async Task MesasCambiaEstadoMediantePut()
+{
+    var activa = true;
+    var metodos = new List<HttpMethod>();
+    var estadosEnviados = new List<bool>();
+    var cliente = CrearClienteReservas(async (request, cancellationToken) =>
+    {
+        metodos.Add(request.Method);
+        if (request.Method == HttpMethod.Put)
+        {
+            var cuerpo = await request.Content!.ReadAsStringAsync(cancellationToken);
+            using var documento = JsonDocument.Parse(cuerpo);
+            activa = documento.RootElement.GetProperty("activa").GetBoolean();
+            estadosEnviados.Add(activa);
+        }
+
+        return JsonResponse(HttpStatusCode.OK,
+            $$"""{"id":12,"numero":8,"capacidad":4,"activa":{{activa.ToString().ToLowerInvariant()}},"fechaCreacion":"2026-01-02T03:04:05Z"}""");
+    });
+    var controller = CrearMesasController(cliente);
+
+    var desactivar = await controller.CambiarEstado(12, CancellationToken.None);
+    var activar = await controller.CambiarEstado(12, CancellationToken.None);
+
+    Verificar(desactivar is RedirectToActionResult && activar is RedirectToActionResult,
+        "El cambio de estado no regresó al listado.");
+    Verificar(metodos.SequenceEqual([HttpMethod.Get, HttpMethod.Put, HttpMethod.Get, HttpMethod.Put])
+        && estadosEnviados.SequenceEqual([false, true]),
+        "La activación o desactivación no consultó el estado vigente y usó PUT.");
+    Verificar(controller.TempData["MensajeExito"] as string == "La mesa se activó correctamente.",
+        "No se mostró la confirmación del último cambio de estado.");
+}
+
+static async Task MesasRechazaDatosInvalidos()
+{
+    var llamadasApi = 0;
+    var cliente = CrearClienteReservas((_, _) =>
+    {
+        llamadasApi++;
+        throw new InvalidOperationException("No se debía llamar a Reservas.");
+    });
+    var modelo = new MesaFormularioViewModel { Numero = 0, Capacidad = 0 };
+    var validaciones = new List<ValidationResult>();
+    var valido = Validator.TryValidateObject(
+        modelo,
+        new ValidationContext(modelo),
+        validaciones,
+        validateAllProperties: true);
+    var controller = CrearMesasController(cliente);
+    foreach (var validacion in validaciones)
+    {
+        foreach (var miembro in validacion.MemberNames)
+        {
+            controller.ModelState.AddModelError(miembro, validacion.ErrorMessage!);
+        }
+    }
+
+    var resultado = await controller.Crear(modelo, CancellationToken.None);
+    Verificar(!valido && validaciones.Count >= 2,
+        "El número o capacidad igual a cero pasó la validación del modelo.");
+    Verificar(resultado is ViewResult && llamadasApi == 0,
+        "Se envió a la API un formulario inválido o no se conservó la vista.");
+    Verificar(modelo.Numero == 0 && modelo.Capacidad == 0,
+        "No se conservaron los datos ingresados al devolver el formulario inválido.");
+}
+
+static async Task MesasManejaErroresHttp()
+{
+    const string mensaje = "Mesa duplicada o no disponible.";
+    var cliente = CrearClienteReservas((request, _) => Task.FromResult(request.Method switch
+    {
+        var metodo when metodo == HttpMethod.Post => JsonResponse(
+            HttpStatusCode.BadRequest,
+            """{"estado":400,"mensaje":"Número de mesa inválido.","fecha":"2026-11-18"}"""),
+        var metodo when metodo == HttpMethod.Get => JsonResponse(
+            HttpStatusCode.NotFound,
+            """{"estado":404,"mensaje":"No existe la mesa.","fecha":"2026-11-18"}"""),
+        _ => JsonResponse(
+            HttpStatusCode.Conflict,
+            $$"""{"estado":409,"mensaje":"{{mensaje}}","fecha":"2026-11-18"}""")
+    }));
+    var controller = CrearMesasController(cliente);
+
+    var error400 = await controller.Crear(
+        new MesaFormularioViewModel { Numero = 0, Capacidad = 2 }, CancellationToken.None);
+    Verificar(error400 is ViewResult
+        && controller.ModelState.Values.SelectMany(valor => valor.Errors)
+            .Any(error => error.ErrorMessage == "Número de mesa inválido."),
+        "No se mostró el mensaje de la API ante el error 400.");
+    controller.ModelState.Clear();
+
+    var error404 = await controller.Detalle(12, CancellationToken.None);
+    Verificar(error404 is PartialViewResult
+        {
+            Model: MesaDetalleViewModel { Mensaje: "No existe la mesa." }
+        },
+        "No se mostró el mensaje de la API ante el error 404.");
+    controller.ModelState.Clear();
+
+    var error409 = await controller.Editar(12, new MesaFormularioViewModel
+    {
+        Numero = 8,
+        Capacidad = 4,
+        Activa = true
+    }, CancellationToken.None);
+    Verificar(error409 is ViewResult
+        && controller.ModelState.Values.SelectMany(valor => valor.Errors)
+            .Any(error => error.ErrorMessage == mensaje)
+        && ((MesaFormularioViewModel)((ViewResult)error409).Model!).Numero == 8,
+        "No se mostró el conflicto ni se conservaron los datos ante el error 409.");
+}
+
+static async Task MesasConservaSesionAnteErroresDeReservas()
+{
+    foreach (var estado in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden })
+    {
+        var mensaje = $"Reservas rechazó la solicitud ({(int)estado}).";
+        var cliente = CrearClienteReservas((_, _) => Task.FromResult(JsonResponse(
+            estado,
+            $$"""{"estado":{{(int)estado}},"mensaje":"{{mensaje}}","fecha":"2026-11-18"}""")));
+        var sesion = new TestSession(("Token", "jwt"), ("Rol", "ADMINISTRADOR"));
+        var controller = new MesasController(cliente);
+        PrepararController(controller, sesion);
+
+        var resultado = await controller.Crear(
+            new MesaFormularioViewModel { Numero = 8, Capacidad = 4 },
+            CancellationToken.None);
+
+        Verificar(resultado is ViewResult
+            && controller.ModelState.Values.SelectMany(valor => valor.Errors)
+                .Any(error => error.ErrorMessage == mensaje),
+            $"No se mostró el error {((int)estado)} de Reservas.");
+        Verificar(sesion.TryGetValue("Token", out _) && sesion.TryGetValue("Rol", out _),
+            $"El error {((int)estado)} de Reservas borró la sesión Web.");
+    }
+}
+
+static Task MesasProtegePorRol()
+{
+    var atributoControlador = (RequireRoleAttribute?)Attribute.GetCustomAttribute(
+        typeof(MesasController),
+        typeof(RequireRoleAttribute));
+    Verificar(atributoControlador is not null,
+        "El controlador de mesas no requiere un rol autenticado.");
+
+    foreach (var rol in new[] { "ADMINISTRADOR", "CAJERO", "COCINA" })
+    {
+        var sesionConsulta = new TestSession(("Token", "jwt"), ("Rol", rol));
+        var controllerConsulta = CrearMesasController(
+            CrearClienteReservas((_, _) => throw new InvalidOperationException()), rol);
+        var contextoConsulta = CrearFiltroContexto(controllerConsulta, sesionConsulta);
+        atributoControlador!.OnActionExecuting(contextoConsulta);
+        Verificar(contextoConsulta.Result is null,
+            $"El rol {rol} no pudo consultar las mesas.");
+    }
+
+    var accionesDeModificacion = new[]
+    {
+        nameof(MesasController.Crear),
+        nameof(MesasController.Editar),
+        nameof(MesasController.CambiarEstado)
+    };
+    foreach (var accion in accionesDeModificacion)
+    {
+        var metodos = typeof(MesasController).GetMethods()
+            .Where(metodo => metodo.Name == accion
+                && Attribute.IsDefined(metodo, typeof(RequireRoleAttribute), inherit: false));
+        foreach (var metodo in metodos)
+        {
+            var atributo = (RequireRoleAttribute?)Attribute.GetCustomAttribute(
+                metodo,
+                typeof(RequireRoleAttribute),
+                inherit: false);
+            Verificar(atributo is not null,
+                $"La acción {accion} no tiene un filtro de rol propio.");
+            if (Attribute.IsDefined(metodo, typeof(HttpPostAttribute), inherit: false))
+            {
+                Verificar(Attribute.IsDefined(metodo, typeof(ValidateAntiForgeryTokenAttribute), inherit: false),
+                    $"La acción {accion} no exige antiforgery.");
+            }
+
+            foreach (var rol in new[] { "ADMINISTRADOR", "CAJERO", "COCINA" })
+            {
+                var sesion = new TestSession(("Token", "jwt"), ("Rol", rol));
+                var controller = CrearMesasController(
+                    CrearClienteReservas((_, _) => throw new InvalidOperationException()), rol);
+                var contexto = CrearFiltroContexto(controller, sesion);
+                atributo!.OnActionExecuting(contexto);
+                Verificar(
+                    rol == "ADMINISTRADOR"
+                        ? contexto.Result is null
+                        : contexto.Result is StatusCodeResult { StatusCode: StatusCodes.Status403Forbidden },
+                    $"El rol {rol} tuvo acceso incorrecto a {accion}.");
+                Verificar(sesion.TryGetValue("Token", out _) && sesion.TryGetValue("Rol", out _),
+                    $"La acción {accion} alteró la sesión del rol {rol}.");
+            }
+        }
+    }
+    return Task.CompletedTask;
 }
 
 static async Task ReservasClienteRespetaContrato()
@@ -802,12 +1088,24 @@ static AdminController CrearAdminController(EasyMenuApiClient cliente)
     return controller;
 }
 
+static MesasController CrearMesasController(
+    ReservasApiClient cliente,
+    string rol = "ADMINISTRADOR")
+{
+    var controller = new MesasController(cliente);
+    PrepararController(controller, new TestSession(("Token", "jwt"), ("Rol", rol)));
+    return controller;
+}
+
 static void PrepararController(Controller controller, ISession session)
 {
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext { Session = session }
     };
+    controller.ViewData = new ViewDataDictionary(
+        new EmptyModelMetadataProvider(),
+        controller.ModelState);
     controller.TempData = new TempDataDictionary(controller.HttpContext, new TestTempDataProvider());
 }
 

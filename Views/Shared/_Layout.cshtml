@@ -38,6 +38,10 @@
                         {
                             <li class="nav-item"><a class="nav-link text-dark" asp-controller="Cocina" asp-action="Index">Cocina</a></li>
                         }
+                        @if (rol is "ADMINISTRADOR" or "CAJERO" or "COCINA")
+                        {
+                            <li class="nav-item"><a class="nav-link text-dark" asp-controller="Mesas" asp-action="Index">Mesas</a></li>
+                        }
                         @if (!string.IsNullOrEmpty(rol))
                         {
                             <li class="nav-item">

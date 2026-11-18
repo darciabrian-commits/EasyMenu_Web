@@ -1,0 +1,103 @@
+@using Microsoft.AspNetCore.Http
+@{
+    ViewData["Title"] = "Mesas";
+    var puedeModificar = Context.Session.GetString("Rol") == "ADMINISTRADOR";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="mb-0">Mesas</h1>
+        <p class="text-secondary mb-0">Consulta el número, la capacidad y el estado de las mesas.</p>
+    </div>
+    @if (puedeModificar)
+    {
+        <a class="btn btn-primary" asp-controller="Mesas" asp-action="Crear">Nueva mesa</a>
+    }
+</div>
+
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="alert alert-success" role="status">@mensajeExito</div>
+}
+@if (TempData["MensajeError"] is string mensajeError)
+{
+    <div class="alert alert-danger" role="alert">@mensajeError</div>
+}
+
+<div id="lista-mesas" aria-live="polite">
+    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <span>Cargando mesas...</span>
+    </div>
+</div>
+
+<div class="modal fade" id="detalle-mesa-modal" tabindex="-1" aria-labelledby="detalle-mesa-titulo" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="detalle-mesa-titulo">Detalle de la mesa</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="detalle-mesa-contenido"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const listaMesas = document.getElementById("lista-mesas");
+        const detalleMesaContenido = document.getElementById("detalle-mesa-contenido");
+        const detalleMesaModal = new bootstrap.Modal(document.getElementById("detalle-mesa-modal"));
+
+        async function cargarMesas() {
+            try {
+                const respuesta = await fetch('@Url.Action("ListaMesas", "Mesas")', {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar las mesas.");
+                listaMesas.innerHTML = await respuesta.text();
+            } catch (error) {
+                listaMesas.innerHTML = "";
+                const alerta = document.createElement("div");
+                alerta.className = "alert alert-danger";
+                alerta.setAttribute("role", "alert");
+                alerta.textContent = error.message || "No fue posible cargar las mesas.";
+                listaMesas.appendChild(alerta);
+            }
+        }
+
+        listaMesas.addEventListener("click", async evento => {
+            const enlace = evento.target.closest("a[data-detalle-mesa]");
+            if (!enlace) return;
+
+            evento.preventDefault();
+            detalleMesaContenido.innerHTML = '<div class="d-flex align-items-center gap-2 text-secondary" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Cargando detalle...</span></div>';
+            detalleMesaModal.show();
+
+            try {
+                const respuesta = await fetch(enlace.href, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible consultar el detalle de la mesa.");
+                detalleMesaContenido.innerHTML = await respuesta.text();
+            } catch (error) {
+                detalleMesaContenido.innerHTML = "";
+                const alerta = document.createElement("div");
+                alerta.className = "alert alert-danger mb-0";
+                alerta.setAttribute("role", "alert");
+                alerta.textContent = error.message || "No fue posible consultar el detalle de la mesa.";
+                detalleMesaContenido.appendChild(alerta);
+            }
+        });
+
+        cargarMesas();
+    </script>
+}

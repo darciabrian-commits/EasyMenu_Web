@@ -1,0 +1,43 @@
+@model MesaFormularioViewModel
+@{
+    ViewData["Title"] = "Crear mesa";
+}
+
+<div class="mb-4">
+    <a asp-controller="Mesas" asp-action="Index" class="text-decoration-none">&larr; Mesas</a>
+    <h1 class="mt-2 mb-0">Crear mesa</h1>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <form asp-controller="Mesas" asp-action="Crear" method="post" data-cargando>
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3" role="alert"></div>
+            <div class="mb-3">
+                <label asp-for="Numero" class="form-label">Número de mesa</label>
+                <input asp-for="Numero" class="form-control" type="number" min="1" step="1" />
+                <span asp-validation-for="Numero" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Capacidad" class="form-label">Capacidad</label>
+                <input asp-for="Capacidad" class="form-control" type="number" min="1" step="1" />
+                <span asp-validation-for="Capacidad" class="text-danger"></span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit">Crear mesa</button>
+                <a class="btn btn-outline-secondary" asp-controller="Mesas" asp-action="Index">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.querySelector("form[data-cargando]")?.addEventListener("submit", evento => {
+            if (!$(evento.currentTarget).valid()) return;
+            const boton = evento.currentTarget.querySelector("button[type='submit']");
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Creando...';
+        });
+    </script>
+}
