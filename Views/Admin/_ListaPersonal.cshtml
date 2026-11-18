@@ -1,0 +1,61 @@
+@model PersonalAdminViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger" role="alert">@Model.Mensaje</div>
+}
+else if (Model.Usuarios.Count == 0)
+{
+    <p class="text-secondary">Todavía no hay personal registrado.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Correo</th>
+                    <th scope="col">Rol</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var usuario in Model.Usuarios)
+                {
+                    <tr>
+                        <td>@usuario.Nombre</td>
+                        <td>@usuario.Correo</td>
+                        <td>@usuario.Rol</td>
+                        <td>
+                            @if (usuario.Activo)
+                            {
+                                <span class="badge text-bg-success">Activo</span>
+                            }
+                            else
+                            {
+                                <span class="badge text-bg-secondary">Inactivo</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="@Url.Action("DetalleUsuario", "Admin", new { id = usuario.Id })"
+                                   data-usuario-id="@usuario.Id">Ver detalle</a>
+                                @if (usuario.Activo)
+                                {
+                                    <form asp-controller="Admin" asp-action="DesactivarUsuario" method="post"
+                                          data-desactivar-usuario>
+                                        <input type="hidden" name="id" value="@usuario.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Desactivar</button>
+                                    </form>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

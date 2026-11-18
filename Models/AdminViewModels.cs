@@ -65,3 +65,57 @@ public sealed class ProductoFormularioViewModel
     [RegularExpression("^(PLATILLO|BEBIDA|POSTRE)$", ErrorMessage = "Selecciona una categoría válida.")]
     public string Categoria { get; set; } = string.Empty;
 }
+
+public sealed class ResumenVentasViewModel
+{
+    public string Fecha { get; init; } = string.Empty;
+    public ResumenVentasResponseDTO? Resumen { get; init; }
+    public string? Mensaje { get; init; }
+}
+
+public sealed class ResumenVentasResponseDTO
+{
+    public required DateOnly Fecha { get; init; }
+    public required int CantidadCobrosRegistrados { get; init; }
+    public required decimal TotalCobradoEfectivo { get; init; }
+    public required decimal TotalCobradoTarjeta { get; init; }
+    public required decimal TotalCobradoTransferencia { get; init; }
+    public required decimal TotalBrutoVentas { get; init; }
+    public required int CantidadReembolsosRegistrados { get; init; }
+    public required decimal TotalReembolsos { get; init; }
+    public required decimal TotalNetoVentas { get; init; }
+}
+
+public sealed class PersonalAdminViewModel
+{
+    public List<UsuarioPersonalViewModel> Usuarios { get; init; } = [];
+    public string? Mensaje { get; init; }
+}
+
+public sealed class UsuarioPersonalViewModel
+{
+    public string Id { get; init; } = string.Empty;
+    public string Nombre { get; init; } = string.Empty;
+    public string Correo { get; init; } = string.Empty;
+    public string Rol { get; init; } = string.Empty;
+    public bool Activo { get; init; }
+    public string? Mensaje { get; init; }
+}
+
+public sealed class UsuarioFormularioViewModel
+{
+    [Required(ErrorMessage = "Ingresa el nombre.")]
+    public string Nombre { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Ingresa el correo.")]
+    [EmailAddress(ErrorMessage = "Ingresa un correo válido.")]
+    public string Correo { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Ingresa la contraseña.")]
+    [DataType(DataType.Password)]
+    public string Clave { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Selecciona un rol.")]
+    [RegularExpression("^(CAJERO|COCINA)$", ErrorMessage = "Solo puedes crear usuarios CAJERO o COCINA.")]
+    public string Rol { get; set; } = string.Empty;
+}

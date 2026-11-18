@@ -1,0 +1,73 @@
+@model ResumenVentasViewModel
+@{
+    ViewData["Title"] = "Resumen de ventas";
+}
+
+<div class="mb-4">
+    <a asp-controller="Admin" asp-action="Index" class="text-decoration-none">&larr; Administración</a>
+    <h1 class="mt-2 mb-0">Resumen de ventas</h1>
+</div>
+
+<form id="form-resumen" class="row g-3 align-items-end mb-4">
+    <div class="col-12 col-sm-6 col-md-4">
+        <label class="form-label" for="fecha-resumen">Fecha</label>
+        <input class="form-control" id="fecha-resumen" name="fecha" type="date" value="@Model.Fecha" required />
+    </div>
+    <div class="col-auto">
+        <button id="consultar-resumen" class="btn btn-primary" type="submit">Consultar</button>
+    </div>
+</form>
+
+<div id="resultado-resumen" aria-live="polite">
+    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <span>Cargando resumen de ventas...</span>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const formularioResumen = document.getElementById("form-resumen");
+        const resultadoResumen = document.getElementById("resultado-resumen");
+        const botonResumen = document.getElementById("consultar-resumen");
+        const urlResumen = '@Url.Action("ConsultaResumenVentas", "Admin")';
+
+        async function consultarResumen() {
+            const parametros = new URLSearchParams({ fecha: document.getElementById("fecha-resumen").value });
+            botonResumen.disabled = true;
+            resultadoResumen.innerHTML = `
+                <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>Cargando resumen de ventas...</span>
+                </div>`;
+
+            try {
+                const respuesta = await fetch(`${urlResumen}?${parametros}`, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible consultar el resumen de ventas.");
+                resultadoResumen.innerHTML = await respuesta.text();
+            } catch (error) {
+                resultadoResumen.innerHTML = "";
+                const alerta = document.createElement("div");
+                alerta.className = "alert alert-danger";
+                alerta.setAttribute("role", "alert");
+                alerta.textContent = error.message || "No fue posible consultar el resumen de ventas.";
+                resultadoResumen.appendChild(alerta);
+            } finally {
+                botonResumen.disabled = false;
+            }
+        }
+
+        formularioResumen.addEventListener("submit", evento => {
+            evento.preventDefault();
+            consultarResumen();
+        });
+
+        consultarResumen();
+    </script>
+}

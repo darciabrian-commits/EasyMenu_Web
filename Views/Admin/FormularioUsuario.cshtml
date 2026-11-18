@@ -1,0 +1,56 @@
+@model UsuarioFormularioViewModel
+@{
+    ViewData["Title"] = "Nuevo usuario";
+}
+
+<div class="mb-4">
+    <a asp-controller="Admin" asp-action="Personal" class="text-decoration-none">&larr; Gestión de personal</a>
+    <h1 class="mt-2 mb-0">Nuevo usuario</h1>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <form asp-controller="Admin" asp-action="CrearUsuario" method="post" data-cargando>
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3" role="alert"></div>
+            <div class="mb-3">
+                <label asp-for="Nombre" class="form-label">Nombre</label>
+                <input asp-for="Nombre" class="form-control" autocomplete="name" />
+                <span asp-validation-for="Nombre" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Correo" class="form-label">Correo</label>
+                <input asp-for="Correo" class="form-control" autocomplete="email" />
+                <span asp-validation-for="Correo" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Clave" class="form-label">Contraseña</label>
+                <input asp-for="Clave" class="form-control" autocomplete="new-password" />
+                <span asp-validation-for="Clave" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Rol" class="form-label">Rol</label>
+                <select asp-for="Rol" class="form-select">
+                    <option value="">Selecciona un rol</option>
+                    <option value="CAJERO">Cajero</option>
+                    <option value="COCINA">Cocina</option>
+                </select>
+                <span asp-validation-for="Rol" class="text-danger"></span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit">Crear usuario</button>
+                <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Personal">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.querySelector("form[data-cargando]")?.addEventListener("submit", evento => {
+            const boton = evento.currentTarget.querySelector("button[type='submit']");
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Creando...';
+        });
+    </script>
+}

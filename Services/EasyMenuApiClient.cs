@@ -121,6 +121,67 @@ public sealed class EasyMenuApiClient(HttpClient httpClient)
         return await httpClient.SendAsync(request, cancellationToken);
     }
 
+    public async Task<HttpResponseMessage> ObtenerResumenVentasAsync(
+        string fecha,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"pagos/resumen?fecha={Uri.EscapeDataString(fecha)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ObtenerUsuariosAsync(
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "usuarios");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> ObtenerUsuarioAsync(
+        string id,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"usuarios/{Uri.EscapeDataString(id)}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> CrearUsuarioAsync(
+        string nombre,
+        string correo,
+        string clave,
+        string rol,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "usuarios")
+        {
+            Content = JsonContent.Create(new { nombre, correo, clave, rol })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
+    public async Task<HttpResponseMessage> DesactivarUsuarioAsync(
+        string id,
+        string token,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"usuarios/{Uri.EscapeDataString(id)}/desactivar");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await httpClient.SendAsync(request, cancellationToken);
+    }
+
     public async Task<HttpResponseMessage> CambiarEstadoPedidoAsync(
         string id,
         string estado,

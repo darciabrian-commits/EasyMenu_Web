@@ -2,7 +2,10 @@ using EasyMenu.Web.Filters;
 using EasyMenu.Web.Models;
 using EasyMenu.Web.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.Globalization;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace EasyMenu.Web.Controllers;
@@ -17,6 +20,331 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
 
     [HttpGet]
     public IActionResult Pedidos() => View();
+
+    [HttpGet]
+    public IActionResult ResumenVentas() => View(new ResumenVentasViewModel
+    {
+        Fecha = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    });
+
+    [HttpGet]
+    public async Task<IActionResult> ConsultaResumenVentas(string? fecha, CancellationToken cancellationToken)
+    {
+        if (!DateOnly.TryParseExact(
+                fecha,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _))
+        {
+            return PartialView("_ResumenVentas", new ResumenVentasViewModel
+            {
+                Fecha = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                Mensaje = "Selecciona una fecha válida."
+            });
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.ObtenerResumenVentasAsync(fecha!, token, cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return PartialView("_ResumenVentas", new ResumenVentasViewModel
+                {
+                    Fecha = fecha!,
+                    Mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            var resumen = await response.Content.ReadFromJsonAsync<ResumenVentasResponseDTO>(
+                cancellationToken: cancellationToken);
+            if (resumen is null)
+            {
+                throw new JsonException("La respuesta del resumen está vacía.");
+            }
+
+            return PartialView("_ResumenVentas", new ResumenVentasViewModel
+            {
+                Fecha = fecha!,
+                Resumen = resumen
+            });
+        }
+        catch (HttpRequestException)
+        {
+            return PartialView("_ResumenVentas", new ResumenVentasViewModel
+            {
+                Fecha = fecha!,
+                Mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return PartialView("_ResumenVentas", new ResumenVentasViewModel
+            {
+                Fecha = fecha!,
+                Mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+        catch (JsonException)
+        {
+            return PartialView("_ResumenVentas", new ResumenVentasViewModel
+            {
+                Fecha = fecha!,
+                Mensaje = "La respuesta del resumen no tiene un formato válido."
+            });
+        }
+    }
+
+    [HttpGet]
+    public IActionResult Personal() => View();
+
+    [HttpGet]
+    public async Task<IActionResult> ListaPersonal(CancellationToken cancellationToken)
+    {
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.ObtenerUsuariosAsync(token, cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return PartialView("_ListaPersonal", new PersonalAdminViewModel
+                {
+                    Mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (!IntentarObtenerUsuarios(documento.RootElement, out var usuarios))
+            {
+                return PartialView("_ListaPersonal", new PersonalAdminViewModel
+                {
+                    Mensaje = "La respuesta de usuarios no tiene un formato válido."
+                });
+            }
+
+            return PartialView("_ListaPersonal", new PersonalAdminViewModel { Usuarios = usuarios });
+        }
+        catch (HttpRequestException)
+        {
+            return PartialView("_ListaPersonal", new PersonalAdminViewModel
+            {
+                Mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return PartialView("_ListaPersonal", new PersonalAdminViewModel
+            {
+                Mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+        catch (JsonException)
+        {
+            return PartialView("_ListaPersonal", new PersonalAdminViewModel
+            {
+                Mensaje = "La respuesta de usuarios no tiene un formato válido."
+            });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> DetalleUsuario(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return PartialView("_DetalleUsuario", new UsuarioPersonalViewModel
+            {
+                Mensaje = "No se indicó el usuario que deseas consultar."
+            });
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.ObtenerUsuarioAsync(id, token, cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return PartialView("_DetalleUsuario", new UsuarioPersonalViewModel
+                {
+                    Mensaje = await LeerMensajeErrorAsync(response, cancellationToken)
+                });
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var documento = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (!IntentarLeerUsuario(documento.RootElement, out var usuario))
+            {
+                return PartialView("_DetalleUsuario", new UsuarioPersonalViewModel
+                {
+                    Mensaje = "La respuesta del usuario no tiene un formato válido."
+                });
+            }
+
+            return PartialView("_DetalleUsuario", usuario);
+        }
+        catch (HttpRequestException)
+        {
+            return PartialView("_DetalleUsuario", new UsuarioPersonalViewModel
+            {
+                Mensaje = "No fue posible conectar con el servidor. Inténtalo nuevamente."
+            });
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return PartialView("_DetalleUsuario", new UsuarioPersonalViewModel
+            {
+                Mensaje = "El servidor tardó demasiado en responder. Inténtalo nuevamente."
+            });
+        }
+        catch (JsonException)
+        {
+            return PartialView("_DetalleUsuario", new UsuarioPersonalViewModel
+            {
+                Mensaje = "La respuesta del usuario no tiene un formato válido."
+            });
+        }
+    }
+
+    [HttpGet]
+    public IActionResult NuevoUsuario() => View("FormularioUsuario", new UsuarioFormularioViewModel());
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CrearUsuario(
+        UsuarioFormularioViewModel modelo,
+        CancellationToken cancellationToken)
+    {
+        if (!new[] { "CAJERO", "COCINA" }.Contains(modelo.Rol, StringComparer.Ordinal))
+        {
+            ModelState.AddModelError(nameof(modelo.Rol), "Solo puedes crear usuarios CAJERO o COCINA.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            LimpiarClave(modelo);
+            return View("FormularioUsuario", modelo);
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.CrearUsuarioAsync(
+                modelo.Nombre,
+                modelo.Correo,
+                modelo.Clave,
+                modelo.Rol,
+                token,
+                cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ModelState.AddModelError(string.Empty, await LeerMensajeErrorAsync(response, cancellationToken));
+                LimpiarClave(modelo);
+                return View("FormularioUsuario", modelo);
+            }
+
+            TempData["MensajeExito"] = "Usuario creado correctamente.";
+            return RedirectToAction(nameof(Personal));
+        }
+        catch (HttpRequestException)
+        {
+            ModelState.AddModelError(string.Empty, "No fue posible conectar con el servidor. Inténtalo nuevamente.");
+            LimpiarClave(modelo);
+            return View("FormularioUsuario", modelo);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            ModelState.AddModelError(string.Empty, "El servidor tardó demasiado en responder. Inténtalo nuevamente.");
+            LimpiarClave(modelo);
+            return View("FormularioUsuario", modelo);
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DesactivarUsuario(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            TempData["MensajeError"] = "No se indicó el usuario que deseas desactivar.";
+            return RedirectToAction(nameof(Personal));
+        }
+
+        var token = HttpContext.Session.GetString("Token");
+        if (string.IsNullOrEmpty(token))
+        {
+            return IrAlLogin();
+        }
+
+        try
+        {
+            using var response = await apiClient.DesactivarUsuarioAsync(id, token, cancellationToken);
+            if (EsSinAutorizacion(response))
+            {
+                return IrAlLogin();
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                TempData["MensajeExito"] = "Usuario desactivado correctamente.";
+            }
+            else
+            {
+                TempData["MensajeError"] = await LeerMensajeErrorAsync(response, cancellationToken);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            TempData["MensajeError"] = "No fue posible conectar con el servidor. Inténtalo nuevamente.";
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            TempData["MensajeError"] = "El servidor tardó demasiado en responder. Inténtalo nuevamente.";
+        }
+
+        return RedirectToAction(nameof(Personal));
+    }
 
     [HttpGet]
     public async Task<IActionResult> ListaPedidos(string? estado, CancellationToken cancellationToken)
@@ -480,6 +808,14 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
             new { aviso = "La sesión venció o no tienes permiso. Inicia sesión nuevamente." });
     }
 
+    private void LimpiarClave(UsuarioFormularioViewModel modelo)
+    {
+        modelo.Clave = string.Empty;
+        ModelState.SetModelValue(
+            nameof(modelo.Clave),
+            new ValueProviderResult(string.Empty, CultureInfo.InvariantCulture));
+    }
+
     private static bool EsSinAutorizacion(HttpResponseMessage response)
     {
         return response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
@@ -566,6 +902,53 @@ public sealed class AdminController(EasyMenuApiClient apiClient) : Controller
         }
 
         producto = new ProductoAdminViewModel();
+        return false;
+    }
+
+    private static bool IntentarObtenerUsuarios(JsonElement elemento, out List<UsuarioPersonalViewModel> usuarios)
+    {
+        if (elemento.ValueKind == JsonValueKind.Array)
+        {
+            usuarios = [];
+            foreach (var item in elemento.EnumerateArray())
+            {
+                if (!IntentarLeerUsuario(item, out var usuario))
+                {
+                    usuarios = [];
+                    return false;
+                }
+
+                usuarios.Add(usuario);
+            }
+
+            return true;
+        }
+
+        usuarios = [];
+        return false;
+    }
+
+    private static bool IntentarLeerUsuario(JsonElement elemento, out UsuarioPersonalViewModel usuario)
+    {
+        if (elemento.ValueKind == JsonValueKind.Object
+            && ObtenerTexto(elemento, "id") is { } id
+            && ObtenerTexto(elemento, "nombre") is { } nombre
+            && ObtenerTexto(elemento, "correo") is { } correo
+            && ObtenerTexto(elemento, "rol") is { } rol
+            && ObtenerBooleano(elemento, "activo") is { } activo)
+        {
+            usuario = new UsuarioPersonalViewModel
+            {
+                Id = id,
+                Nombre = nombre,
+                Correo = correo,
+                Rol = rol,
+                Activo = activo
+            };
+            return true;
+        }
+
+        usuario = new UsuarioPersonalViewModel();
         return false;
     }
 

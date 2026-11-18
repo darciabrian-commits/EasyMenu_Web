@@ -1,0 +1,19 @@
+@model UsuarioPersonalViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger mb-0" role="alert">@Model.Mensaje</div>
+}
+else
+{
+    <dl class="row mb-0">
+        <dt class="col-sm-4">Nombre</dt>
+        <dd class="col-sm-8">@Model.Nombre</dd>
+        <dt class="col-sm-4">Correo</dt>
+        <dd class="col-sm-8">@Model.Correo</dd>
+        <dt class="col-sm-4">Rol</dt>
+        <dd class="col-sm-8">@Model.Rol</dd>
+        <dt class="col-sm-4">Estado</dt>
+        <dd class="col-sm-8">@(Model.Activo ? "Activo" : "Inactivo")</dd>
+    </dl>
+}

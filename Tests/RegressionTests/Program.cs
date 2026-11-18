@@ -10,9 +10,18 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 
 var fallos = 0;
+await Ejecutar("el resumen consulta por fecha y deserializa todos sus campos", ResumenVentasConsultaFechaYDeserializaCampos);
+await Ejecutar("el resumen muestra los errores HTTP de la API", ResumenVentasMuestraErrorHttp);
+await Ejecutar("las acciones de administración son exclusivas del administrador", AdminRechazaRolesNoPermitidos);
+await Ejecutar("el personal se lista sin conservar contraseñas", PersonalListaUsuariosSinClave);
+await Ejecutar("se pueden crear usuarios cajero y cocina con el contrato real", PersonalCreaRolesPermitidos);
+await Ejecutar("personal rechaza roles inválidos sin llamar a la API", PersonalRechazaRolInvalido);
+await Ejecutar("personal muestra errores HTTP al crear usuarios", PersonalMuestraErrorHttpAlCrear);
+await Ejecutar("personal desactiva usuarios mediante PATCH", PersonalDesactivaUsuario);
 await Ejecutar("el cobro consulta el pedido y usa el PagoDTO real", CobroConsultaPedidoYUsaPagoDto);
 await Ejecutar("el cobro rechaza pagos duplicados", CobroRechazaPagoDuplicado);
 await Ejecutar("el cobro muestra el rechazo de duplicado de la API", CobroMuestraDuplicadoDeApi);
@@ -173,6 +182,227 @@ static async Task ProductoRechazaCategoriaInvalida()
     Verificar(llamadasApi == 0, "La categoría inválida llegó a la API.");
 }
 
+static async Task ResumenVentasConsultaFechaYDeserializaCampos()
+{
+    HttpRequestMessage? solicitud = null;
+    var cliente = CrearCliente((request, _) =>
+    {
+        solicitud = request;
+        return Task.FromResult(JsonResponse(HttpStatusCode.OK, """
+            {
+              "fecha":"2026-11-18",
+              "cantidadCobrosRegistrados":12,
+              "totalCobradoEfectivo":125.50,
+              "totalCobradoTarjeta":200.25,
+              "totalCobradoTransferencia":75.00,
+              "totalBrutoVentas":400.75,
+              "cantidadReembolsosRegistrados":2,
+              "totalReembolsos":20.25,
+              "totalNetoVentas":380.50
+            }
+            """));
+    });
+    var controller = CrearAdminController(cliente);
+
+    var resultado = await controller.ConsultaResumenVentas("2026-11-18", CancellationToken.None);
+
+    Verificar(resultado is PartialViewResult { ViewName: "_ResumenVentas" },
+        "No se devolvió la vista parcial del resumen.");
+    var resumen = ((ResumenVentasViewModel)((PartialViewResult)resultado).Model!).Resumen!;
+    Verificar(solicitud?.Method == HttpMethod.Get
+        && solicitud.RequestUri!.PathAndQuery == "/api/pagos/resumen?fecha=2026-11-18",
+        "No se consultó el endpoint de resumen con la fecha seleccionada.");
+    Verificar(solicitud!.Headers.Authorization?.Scheme == "Bearer"
+        && solicitud.Headers.Authorization.Parameter == "jwt",
+        "La consulta no usó el token de sesión.");
+    Verificar(resumen.Fecha == new DateOnly(2026, 11, 18)
+        && resumen.CantidadCobrosRegistrados == 12
+        && resumen.TotalCobradoEfectivo == 125.50m
+        && resumen.TotalCobradoTarjeta == 200.25m
+        && resumen.TotalCobradoTransferencia == 75m
+        && resumen.TotalBrutoVentas == 400.75m
+        && resumen.CantidadReembolsosRegistrados == 2
+        && resumen.TotalReembolsos == 20.25m
+        && resumen.TotalNetoVentas == 380.50m,
+        "No se deserializaron todos los campos reales del resumen.");
+}
+
+static async Task ResumenVentasMuestraErrorHttp()
+{
+    var cliente = CrearCliente((_, _) => Task.FromResult(JsonResponse(
+        HttpStatusCode.BadRequest,
+        """{"estado":400,"mensaje":"La fecha no es válida.","fecha":"2026-11-18"}""")));
+
+    var resultado = await CrearAdminController(cliente)
+        .ConsultaResumenVentas("2026-11-18", CancellationToken.None);
+
+    var modelo = (ResumenVentasViewModel)((PartialViewResult)resultado).Model!;
+    Verificar(modelo.Mensaje == "La fecha no es válida.",
+        "No se mostró el mensaje de error devuelto por la API.");
+}
+
+static Task AdminRechazaRolesNoPermitidos()
+{
+    var session = new TestSession(("Token", "jwt"), ("Rol", "CAJERO"));
+    var context = CrearFiltroContexto(CrearAdminController(CrearCliente((_, _) =>
+        throw new InvalidOperationException("No se esperaba una llamada a la API."))), session);
+    var atributo = (RequireRoleAttribute?)Attribute.GetCustomAttribute(
+        typeof(AdminController),
+        typeof(RequireRoleAttribute));
+
+    Verificar(atributo is not null, "AdminController no protege sus acciones con RequireRole.");
+    atributo!.OnActionExecuting(context);
+
+    Verificar(context.Result is RedirectToActionResult,
+        "Un usuario que no es administrador obtuvo acceso al controlador Admin.");
+    Verificar(!session.TryGetValue("Token", out _),
+        "No se limpió la sesión del usuario no autorizado.");
+    return Task.CompletedTask;
+}
+
+static async Task PersonalListaUsuariosSinClave()
+{
+    HttpRequestMessage? solicitud = null;
+    var cliente = CrearCliente((request, _) =>
+    {
+        solicitud = request;
+        return Task.FromResult(JsonResponse(HttpStatusCode.OK, """
+            [
+              {"id":7,"nombre":"Ana","correo":"ana@example.com","clave":"no-exponer","rol":"CAJERO","activo":true},
+              {"id":8,"nombre":"Luis","correo":"luis@example.com","clave":"no-exponer","rol":"COCINA","activo":false}
+            ]
+            """));
+    });
+
+    var resultado = await CrearAdminController(cliente).ListaPersonal(CancellationToken.None);
+
+    Verificar(resultado is PartialViewResult { ViewName: "_ListaPersonal" },
+        "No se devolvió la vista parcial del personal.");
+    var usuarios = ((PersonalAdminViewModel)((PartialViewResult)resultado).Model!).Usuarios;
+    Verificar(solicitud?.Method == HttpMethod.Get
+        && solicitud.RequestUri!.AbsolutePath == "/api/usuarios"
+        && solicitud.Headers.Authorization?.Parameter == "jwt",
+        "No se consultó correctamente el endpoint de usuarios.");
+    Verificar(usuarios.Count == 2
+        && usuarios[0].Id == "7"
+        && usuarios[0].Nombre == "Ana"
+        && usuarios[0].Correo == "ana@example.com"
+        && usuarios[0].Rol == "CAJERO"
+        && usuarios[0].Activo
+        && usuarios[1].Rol == "COCINA"
+        && !usuarios[1].Activo,
+        "No se mapearon los datos del listado de usuarios.");
+    Verificar(typeof(UsuarioPersonalViewModel).GetProperty("Clave") is null,
+        "El modelo de personal conserva una contraseña.");
+}
+
+static async Task PersonalCreaRolesPermitidos()
+{
+    foreach (var rol in new[] { "CAJERO", "COCINA" })
+    {
+        HttpRequestMessage? solicitud = null;
+        string? cuerpoSolicitud = null;
+        var cliente = CrearCliente((request, cancellationToken) =>
+        {
+            solicitud = request;
+            cuerpoSolicitud = request.Content!.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created));
+        });
+        var controller = CrearAdminController(cliente);
+
+        var resultado = await controller.CrearUsuario(new UsuarioFormularioViewModel
+        {
+            Nombre = "Personal",
+            Correo = $"{rol.ToLowerInvariant()}@example.com",
+            Clave = "clave-solo-para-la-solicitud",
+            Rol = rol
+        }, CancellationToken.None);
+
+        Verificar(resultado is RedirectToActionResult { ActionName: nameof(AdminController.Personal) },
+            $"No se creó el rol {rol}.");
+        Verificar(solicitud?.Method == HttpMethod.Post
+            && solicitud.RequestUri!.AbsolutePath == "/api/usuarios"
+            && solicitud.Headers.Authorization?.Parameter == "jwt",
+            $"No se envió el POST real para {rol}.");
+        using var documento = JsonDocument.Parse(cuerpoSolicitud!);
+        var propiedades = documento.RootElement.EnumerateObject()
+            .Select(propiedad => propiedad.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        Verificar(propiedades.SetEquals(["nombre", "correo", "clave", "rol"])
+            && documento.RootElement.GetProperty("rol").GetString() == rol,
+            "La creación envió campos extra o un rol distinto al permitido.");
+    }
+}
+
+static async Task PersonalRechazaRolInvalido()
+{
+    var llamadasApi = 0;
+    var controller = CrearAdminController(CrearCliente((_, _) =>
+    {
+        llamadasApi++;
+        throw new InvalidOperationException("No se debía llamar a la API.");
+    }));
+
+    var resultado = await controller.CrearUsuario(new UsuarioFormularioViewModel
+    {
+        Nombre = "Usuario",
+        Correo = "usuario@example.com",
+        Clave = "clave",
+        Rol = "ADMINISTRADOR"
+    }, CancellationToken.None);
+
+    Verificar(resultado is ViewResult && llamadasApi == 0,
+        "Se intentó crear un rol no permitido.");
+    Verificar(controller.ModelState.ContainsKey(nameof(UsuarioFormularioViewModel.Rol)),
+        "No se reportó el rol inválido en la validación del servidor.");
+}
+
+static async Task PersonalMuestraErrorHttpAlCrear()
+{
+    var cliente = CrearCliente((_, _) => Task.FromResult(JsonResponse(
+        HttpStatusCode.Conflict,
+        """{"estado":409,"mensaje":"El correo ya está registrado.","fecha":"2026-11-18"}""")));
+    var controller = CrearAdminController(cliente);
+    var modelo = new UsuarioFormularioViewModel
+    {
+        Nombre = "Usuario",
+        Correo = "usuario@example.com",
+        Clave = "clave-que-no-debe-retenerse",
+        Rol = "CAJERO"
+    };
+
+    var resultado = await controller.CrearUsuario(modelo, CancellationToken.None);
+
+    Verificar(resultado is ViewResult
+        && controller.ModelState.Values.SelectMany(valor => valor.Errors)
+            .Any(error => error.ErrorMessage == "El correo ya está registrado."),
+        "No se mostró el error HTTP de la API al crear el usuario.");
+    Verificar(modelo.Clave.Length == 0,
+        "Se conservó la contraseña tras el error de creación.");
+}
+
+static async Task PersonalDesactivaUsuario()
+{
+    HttpRequestMessage? solicitud = null;
+    var cliente = CrearCliente((request, _) =>
+    {
+        solicitud = request;
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+    });
+    var controller = CrearAdminController(cliente);
+
+    var resultado = await controller.DesactivarUsuario("7", CancellationToken.None);
+
+    Verificar(resultado is RedirectToActionResult { ActionName: nameof(AdminController.Personal) },
+        "La desactivación no regresó al listado de personal.");
+    Verificar(solicitud?.Method == HttpMethod.Patch
+        && solicitud.RequestUri!.AbsolutePath == "/api/usuarios/7/desactivar"
+        && solicitud.Headers.Authorization?.Parameter == "jwt",
+        "No se utilizó el endpoint PATCH para desactivar al usuario.");
+    Verificar(controller.TempData["MensajeExito"] as string == "Usuario desactivado correctamente.",
+        "No se confirmó la desactivación correctamente.");
+}
+
 static async Task LoginDistingueErrorServidor()
 {
     var cliente = CrearCliente((_, _) => Task.FromResult(
@@ -255,12 +485,31 @@ static CajaController CrearCajaController(EasyMenuApiClient cliente)
     return controller;
 }
 
+static AdminController CrearAdminController(EasyMenuApiClient cliente)
+{
+    var controller = new AdminController(cliente);
+    PrepararController(controller, new TestSession(("Token", "jwt"), ("Rol", "ADMINISTRADOR")));
+    return controller;
+}
+
 static void PrepararController(Controller controller, ISession session)
 {
     controller.ControllerContext = new ControllerContext
     {
         HttpContext = new DefaultHttpContext { Session = session }
     };
+    controller.TempData = new TempDataDictionary(controller.HttpContext, new TestTempDataProvider());
+}
+
+static ActionExecutingContext CrearFiltroContexto(Controller controller, ISession session)
+{
+    var httpContext = new DefaultHttpContext { Session = session };
+    var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+    return new ActionExecutingContext(
+        actionContext,
+        [],
+        new Dictionary<string, object?>(),
+        controller);
 }
 
 static HttpResponseMessage JsonResponse(HttpStatusCode status, string json)
@@ -307,5 +556,14 @@ sealed class TestSession(params (string Clave, string Valor)[] valores) : ISessi
         var encontrado = datos.TryGetValue(key, out var valor);
         value = valor;
         return encontrado;
+    }
+}
+
+sealed class TestTempDataProvider : ITempDataProvider
+{
+    public IDictionary<string, object> LoadTempData(HttpContext context) => new Dictionary<string, object>();
+
+    public void SaveTempData(HttpContext context, IDictionary<string, object> values)
+    {
     }
 }

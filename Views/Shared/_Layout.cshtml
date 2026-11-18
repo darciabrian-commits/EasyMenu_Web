@@ -27,6 +27,8 @@
                         @if (rol == "ADMINISTRADOR")
                         {
                             <li class="nav-item"><a class="nav-link text-dark" asp-controller="Admin" asp-action="Index">Administrador</a></li>
+                            <li class="nav-item"><a class="nav-link text-dark" asp-controller="Admin" asp-action="ResumenVentas">Resumen de ventas</a></li>
+                            <li class="nav-item"><a class="nav-link text-dark" asp-controller="Admin" asp-action="Personal">Personal</a></li>
                         }
                         else if (rol == "CAJERO")
                         {

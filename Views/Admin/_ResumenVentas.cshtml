@@ -1,0 +1,62 @@
+@model ResumenVentasViewModel
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger" role="alert">@Model.Mensaje</div>
+}
+else if (Model.Resumen is { } resumen)
+{
+    @if (resumen.CantidadCobrosRegistrados == 0 && resumen.CantidadReembolsosRegistrados == 0)
+    {
+        <div class="alert alert-info" role="status">No hay ventas ni reembolsos registrados para esta fecha.</div>
+    }
+
+    <h2 class="h5 mb-3">Resultados del @Model.Fecha</h2>
+    <div class="row g-3">
+        <div class="col-12 col-md-6 col-xl-4">
+            <section class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h3 class="h6 text-secondary">Cobros registrados</h3>
+                    <p class="display-6 mb-0">@resumen.CantidadCobrosRegistrados</p>
+                </div>
+            </section>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            <section class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h3 class="h6 text-secondary">Ventas brutas</h3>
+                    <p class="display-6 mb-0">@resumen.TotalBrutoVentas.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</p>
+                </div>
+            </section>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            <section class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h3 class="h6 text-secondary">Ventas netas</h3>
+                    <p class="display-6 mb-0">@resumen.TotalNetoVentas.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</p>
+                </div>
+            </section>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            <section class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h3 class="h6 text-secondary">Desglose por método de pago</h3>
+                    <dl class="mb-0">
+                        <div class="d-flex justify-content-between gap-3"><dt>Efectivo</dt><dd>@resumen.TotalCobradoEfectivo.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd></div>
+                        <div class="d-flex justify-content-between gap-3"><dt>Tarjeta</dt><dd>@resumen.TotalCobradoTarjeta.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd></div>
+                        <div class="d-flex justify-content-between gap-3"><dt>Transferencia</dt><dd>@resumen.TotalCobradoTransferencia.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</dd></div>
+                    </dl>
+                </div>
+            </section>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            <section class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h3 class="h6 text-secondary">Reembolsos</h3>
+                    <p class="mb-1">Registrados: @resumen.CantidadReembolsosRegistrados</p>
+                    <p class="h4 mb-0">@resumen.TotalReembolsos.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"))</p>
+                </div>
+            </section>
+        </div>
+    </div>
+}

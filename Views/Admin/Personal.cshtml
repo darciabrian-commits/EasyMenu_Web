@@ -1,0 +1,124 @@
+@{
+    ViewData["Title"] = "Gestión de personal";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <a asp-controller="Admin" asp-action="Index" class="text-decoration-none">&larr; Administración</a>
+        <h1 class="mt-2 mb-0">Gestión de personal</h1>
+    </div>
+    <a class="btn btn-primary" asp-controller="Admin" asp-action="NuevoUsuario">Nuevo usuario</a>
+</div>
+
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="alert alert-success" role="status">@mensajeExito</div>
+}
+@if (TempData["MensajeError"] is string mensajeError)
+{
+    <div class="alert alert-danger" role="alert">@mensajeError</div>
+}
+
+<div id="lista-personal" aria-live="polite">
+    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <span>Cargando personal...</span>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-detalle-usuario" tabindex="-1" aria-labelledby="modal-detalle-usuario-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="modal-detalle-usuario-titulo">Detalle del usuario</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="detalle-usuario" aria-live="polite"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const listaPersonal = document.getElementById("lista-personal");
+        const detalleUsuario = document.getElementById("detalle-usuario");
+        const modalDetalleUsuario = bootstrap.Modal.getOrCreateInstance(
+            document.getElementById("modal-detalle-usuario"));
+        const urlListaPersonal = '@Url.Action("ListaPersonal", "Admin")';
+        const urlDetalleUsuario = '@Url.Action("DetalleUsuario", "Admin")';
+
+        async function cargarPersonal() {
+            try {
+                const respuesta = await fetch(urlListaPersonal, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar el personal.");
+                listaPersonal.innerHTML = await respuesta.text();
+            } catch (error) {
+                mostrarError(listaPersonal, error.message || "No fue posible cargar el personal.");
+            }
+        }
+
+        async function mostrarDetalleUsuario(id) {
+            modalDetalleUsuario.show();
+            detalleUsuario.innerHTML = `
+                <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span>Cargando detalle...</span>
+                </div>`;
+            const parametros = new URLSearchParams({ id });
+
+            try {
+                const respuesta = await fetch(`${urlDetalleUsuario}?${parametros}`, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar el detalle del usuario.");
+                detalleUsuario.innerHTML = await respuesta.text();
+            } catch (error) {
+                mostrarError(detalleUsuario, error.message || "No fue posible cargar el detalle del usuario.");
+            }
+        }
+
+        function mostrarError(contenedor, mensaje) {
+            contenedor.innerHTML = "";
+            const alerta = document.createElement("div");
+            alerta.className = "alert alert-danger mb-0";
+            alerta.setAttribute("role", "alert");
+            alerta.textContent = mensaje;
+            contenedor.appendChild(alerta);
+        }
+
+        listaPersonal.addEventListener("click", evento => {
+            const enlace = evento.target.closest("a[data-usuario-id]");
+            if (!enlace) return;
+            evento.preventDefault();
+            mostrarDetalleUsuario(enlace.dataset.usuarioId);
+        });
+
+        listaPersonal.addEventListener("submit", evento => {
+            const formulario = evento.target.closest("form[data-desactivar-usuario]");
+            if (!formulario) return;
+            if (!confirm("¿Seguro que deseas desactivar a este usuario?")) {
+                evento.preventDefault();
+                return;
+            }
+
+            const boton = formulario.querySelector("button[type='submit']");
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Desactivando...';
+        });
+
+        cargarPersonal();
+    </script>
+}
