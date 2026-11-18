@@ -12,8 +12,13 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 
 var fallos = 0;
+await Ejecutar("Reservas usa rutas, métodos, DTO y autenticación de servicio", ReservasClienteRespetaContrato);
+await Ejecutar("Reservas convierte errores HTTP y JSON inválido en resultados controlados", ReservasClienteManejaErroresHttp);
+await Ejecutar("Reservas no envía solicitudes sin configuración válida", ReservasClienteExigeConfiguracion);
+await Ejecutar("Reservas controla errores de conexión y timeout", ReservasClienteManejaErroresDeTransporte);
 await Ejecutar("el resumen consulta por fecha y deserializa todos sus campos", ResumenVentasConsultaFechaYDeserializaCampos);
 await Ejecutar("el resumen muestra los errores HTTP de la API", ResumenVentasMuestraErrorHttp);
 await Ejecutar("las acciones de administración son exclusivas del administrador", AdminRechazaRolesNoPermitidos);
@@ -30,7 +35,8 @@ await Ejecutar("productos rechaza categorías manipuladas sin llamar a la API", 
 await Ejecutar("el login diferencia error del servidor de credenciales incorrectas", LoginDistingueErrorServidor);
 await Ejecutar("el login exige todos los campos del DTO y limpia sesión", LoginValidaDtoYLimpiaSesion);
 await Ejecutar("el logout limpia la sesión", LogoutLimpiaSesion);
-await Ejecutar("RequireRole limpia sesiones con rol no autorizado", RequireRoleRechazaRolNoPermitido);
+await Ejecutar("RequireRole conserva la sesión y responde 403 para rol no permitido", RequireRoleRechazaRolNoPermitido);
+await Ejecutar("RequireRole redirige al login cuando falta la sesión", RequireRoleRedirigeSinSesion);
 
 Console.WriteLine(fallos == 0 ? "Todas las pruebas pasaron." : $"{fallos} prueba(s) fallaron.");
 Environment.ExitCode = fallos == 0 ? 0 : 1;
@@ -47,6 +53,258 @@ async Task Ejecutar(string nombre, Func<Task> prueba)
         fallos++;
         Console.Error.WriteLine($"FAIL {nombre}: {excepcion.Message}");
     }
+}
+
+static async Task ReservasClienteRespetaContrato()
+{
+    const string clave = "clave-prueba-reservas-0123456789-ABC";
+    const string mesaJson = """
+        {"id":12,"numero":8,"capacidad":4,"activa":true,"fechaCreacion":"2026-01-02T03:04:05Z"}
+        """;
+    const string reservaJson = """
+        {"id":20,"nombreCliente":"Ana","telefono":"5551234","fechaReserva":"2026-03-04",
+         "horaReserva":"19:30:00","cantidadPersonas":3,"mesaId":12,"numeroMesa":8,
+         "estado":"PENDIENTE","observaciones":"Ventana","fechaCreacion":"2026-01-02T03:04:05Z"}
+        """;
+    var solicitudes = new List<(HttpMethod Metodo, string Ruta, string? Cuerpo, string? Clave, string? Autorizacion)>();
+    var cliente = CrearClienteReservas(async (request, cancellationToken) =>
+    {
+        var cuerpo = request.Content is null
+            ? null
+            : await request.Content.ReadAsStringAsync(cancellationToken);
+        var claveRecibida = request.Headers.TryGetValues("X-Reservas-Service-Key", out var valoresClave)
+            ? valoresClave.Single()
+            : null;
+        var autorizacion = request.Headers.Authorization?.ToString();
+        solicitudes.Add((request.Method, request.RequestUri!.AbsolutePath, cuerpo, claveRecibida, autorizacion));
+
+        var json = request.RequestUri.AbsolutePath switch
+        {
+            "/api/Mesas" when request.Method == HttpMethod.Get => "[]",
+            "/api/Reservas" when request.Method == HttpMethod.Get => "[]",
+            "/api/Reservas/fecha/2026-03-04" => $"[{reservaJson}]",
+            "/api/Mesas/12" or "/api/Mesas" => mesaJson,
+            "/api/Reservas/20/estado" or "/api/Reservas/20" or "/api/Reservas" => reservaJson,
+            _ => throw new InvalidOperationException($"Ruta inesperada: {request.RequestUri}")
+        };
+        return JsonResponse(
+            request.Method == HttpMethod.Post ? HttpStatusCode.Created : HttpStatusCode.OK,
+            json);
+    });
+
+    var fecha = new DateOnly(2026, 3, 4);
+    var mesaCreada = await cliente.CrearMesaAsync(new MesaCreate { Numero = 8, Capacidad = 4 });
+    var mesaConsultada = await cliente.ObtenerMesaAsync(12);
+    var mesas = await cliente.ObtenerMesasAsync();
+    var mesaActualizada = await cliente.ActualizarMesaAsync(
+        12,
+        new MesaUpdate { Numero = 8, Capacidad = 5, Activa = false });
+    var reservaCreada = await cliente.CrearReservaAsync(new ReservaCreate
+    {
+        NombreCliente = "Ana",
+        Telefono = "5551234",
+        FechaReserva = fecha,
+        HoraReserva = new TimeOnly(19, 30),
+        CantidadPersonas = 3,
+        MesaId = 12,
+        Observaciones = "Ventana"
+    });
+    var reservaConsultada = await cliente.ObtenerReservaAsync(20);
+    var reservas = await cliente.ObtenerReservasAsync();
+    var reservasFecha = await cliente.ObtenerReservasPorFechaAsync(fecha);
+    var reservaActualizada = await cliente.ActualizarReservaAsync(20, new ReservaUpdate
+    {
+        NombreCliente = "Ana",
+        Telefono = "5551234",
+        FechaReserva = fecha,
+        HoraReserva = new TimeOnly(19, 30),
+        CantidadPersonas = 3,
+        MesaId = 12,
+        Observaciones = "Ventana"
+    });
+    var estadoActualizado = await cliente.CambiarEstadoReservaAsync(
+        20,
+        new ReservaEstado { Estado = "CONFIRMADA" });
+
+    Verificar(
+        new[]
+        {
+            mesaCreada.IsSuccess, mesaConsultada.IsSuccess, mesas.IsSuccess, mesaActualizada.IsSuccess,
+            reservaCreada.IsSuccess, reservaConsultada.IsSuccess, reservas.IsSuccess,
+            reservasFecha.IsSuccess, reservaActualizada.IsSuccess, estadoActualizado.IsSuccess
+        }.All(exito => exito),
+        "Una operación tipada de Reservas no se deserializó correctamente.");
+    Verificar(mesaConsultada.Value?.FechaCreacion
+        == new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero),
+        "No se deserializó la fecha de creación de la mesa.");
+    Verificar(reservaConsultada.Value?.FechaReserva == fecha
+        && reservaConsultada.Value.HoraReserva == new TimeOnly(19, 30),
+        "No se deserializaron DateOnly y TimeOnly de la reserva.");
+    Verificar(reservasFecha.Value?.Single().FechaReserva == fecha,
+        "La búsqueda por fecha no devolvió la reserva esperada.");
+
+    var rutasEsperadas = new[]
+    {
+        (HttpMethod.Post, "/api/Mesas"),
+        (HttpMethod.Get, "/api/Mesas/12"),
+        (HttpMethod.Get, "/api/Mesas"),
+        (HttpMethod.Put, "/api/Mesas/12"),
+        (HttpMethod.Post, "/api/Reservas"),
+        (HttpMethod.Get, "/api/Reservas/20"),
+        (HttpMethod.Get, "/api/Reservas"),
+        (HttpMethod.Get, "/api/Reservas/fecha/2026-03-04"),
+        (HttpMethod.Put, "/api/Reservas/20"),
+        (HttpMethod.Patch, "/api/Reservas/20/estado")
+    };
+    Verificar(solicitudes.Count == rutasEsperadas.Length,
+        "Se envió una cantidad inesperada de solicitudes a Reservas.");
+    for (var indice = 0; indice < rutasEsperadas.Length; indice++)
+    {
+        Verificar(solicitudes[indice].Metodo == rutasEsperadas[indice].Item1
+            && solicitudes[indice].Ruta == rutasEsperadas[indice].Item2,
+            $"Método o ruta incorrecta en la solicitud {indice + 1}.");
+        Verificar(solicitudes[indice].Clave == clave,
+            "Faltó la clave de servicio en una solicitud a Reservas.");
+        Verificar(solicitudes[indice].Autorizacion is null,
+            "Se envió un encabezado Authorization a Reservas.");
+    }
+
+    using var mesaCreateJson = JsonDocument.Parse(solicitudes[0].Cuerpo!);
+    Verificar(mesaCreateJson.RootElement.GetProperty("numero").GetInt32() == 8
+        && mesaCreateJson.RootElement.GetProperty("capacidad").GetInt32() == 4,
+        "MesaCreate no se serializó con los nombres y valores del contrato.");
+    using var mesaUpdateJson = JsonDocument.Parse(solicitudes[3].Cuerpo!);
+    Verificar(!mesaUpdateJson.RootElement.GetProperty("activa").GetBoolean(),
+        "MesaUpdate no serializó el campo activa.");
+    using var reservaCreateJson = JsonDocument.Parse(solicitudes[4].Cuerpo!);
+    Verificar(reservaCreateJson.RootElement.GetProperty("fechaReserva").GetString() == "2026-03-04"
+        && reservaCreateJson.RootElement.GetProperty("mesaId").GetInt32() == 12,
+        "ReservaCreate no serializó correctamente la fecha o mesa.");
+    Verificar(reservaCreateJson.RootElement.GetProperty("horaReserva").GetString()!
+        .StartsWith("19:30:00", StringComparison.Ordinal),
+        "ReservaCreate no serializó TimeOnly en formato de hora ISO.");
+    using var reservaUpdateJson = JsonDocument.Parse(solicitudes[8].Cuerpo!);
+    Verificar(reservaUpdateJson.RootElement.GetProperty("cantidadPersonas").GetInt32() == 3
+        && reservaUpdateJson.RootElement.GetProperty("observaciones").GetString() == "Ventana",
+        "ReservaUpdate no se serializó con los campos del contrato.");
+    using var estadoJson = JsonDocument.Parse(solicitudes[9].Cuerpo!);
+    Verificar(estadoJson.RootElement.GetProperty("estado").GetString() == "CONFIRMADA",
+        "ReservaEstado no se serializó correctamente.");
+    Verificar(!solicitudes.Any(solicitud => solicitud.Metodo == HttpMethod.Delete),
+        "Se detectó una ruta DELETE no incluida en el contrato.");
+    Verificar(!string.Join(" ", mesaCreada.Mensaje, reservaCreada.Mensaje).Contains(clave, StringComparison.Ordinal),
+        "La clave de servicio se expuso en un resultado.");
+}
+
+static async Task ReservasClienteManejaErroresHttp()
+{
+    var estados = new[]
+    {
+        HttpStatusCode.BadRequest,
+        HttpStatusCode.Unauthorized,
+        HttpStatusCode.Forbidden,
+        HttpStatusCode.NotFound,
+        HttpStatusCode.Conflict,
+        HttpStatusCode.InternalServerError
+    };
+
+    foreach (var estado in estados)
+    {
+        const string mensaje = "Error controlado de prueba.";
+        var cliente = CrearClienteReservas((_, _) => Task.FromResult(JsonResponse(
+            estado,
+            $$"""{"estado":{{(int)estado}},"mensaje":"{{mensaje}}","fecha":"2026-03-04"}""")));
+        var resultado = await cliente.ObtenerMesaAsync(12);
+
+        Verificar(resultado.StatusCode == estado && resultado.Mensaje == mensaje,
+            $"No se preservó el estado o mensaje HTTP {((int)estado)}.");
+    }
+
+    var jsonInvalido = CrearClienteReservas((_, _) =>
+        Task.FromResult(JsonResponse(HttpStatusCode.OK, """{"id":""")));
+    var respuestaInvalida = await jsonInvalido.ObtenerMesaAsync(12);
+    Verificar(respuestaInvalida.Failure == ReservasApiFailure.InvalidJson
+        && respuestaInvalida.StatusCode == HttpStatusCode.OK,
+        "No se manejó el JSON inválido como error controlado.");
+
+    var errorJsonInvalido = CrearClienteReservas((_, _) =>
+        Task.FromResult(JsonResponse(HttpStatusCode.Conflict, "no-json")));
+    var conflicto = await errorJsonInvalido.ObtenerMesaAsync(12);
+    Verificar(conflicto.StatusCode == HttpStatusCode.Conflict
+        && conflicto.Failure == ReservasApiFailure.InvalidJson
+        && !string.IsNullOrWhiteSpace(conflicto.Mensaje),
+        "No se preservó el conflicto cuando el cuerpo de error no era JSON válido.");
+}
+
+static async Task ReservasClienteExigeConfiguracion()
+{
+    var solicitudes = 0;
+    var opcionesSinConfigurar = ReservasApiOptions.Load(new ConfigurationBuilder().Build(), true);
+    var clienteSinConfigurar = CrearClienteReservas((_, _) =>
+    {
+        solicitudes++;
+        throw new InvalidOperationException("No se debía enviar una solicitud.");
+    }, opcionesSinConfigurar);
+    var resultado = await clienteSinConfigurar.ObtenerMesasAsync();
+
+    Verificar(!opcionesSinConfigurar.IsConfigured
+        && resultado.Failure == ReservasApiFailure.Configuration
+        && solicitudes == 0,
+        "Se envió una solicitud o no se informó la configuración faltante.");
+
+    const string clave = "clave-prueba-reservas-0123456789-ABC";
+    Verificar(CrearOpcionesReservas("http://localhost:5000", clave, true).IsConfigured,
+        "Se rechazó HTTP en localhost durante el desarrollo.");
+    Verificar(!CrearOpcionesReservas("http://reservas.example.test", clave, true).IsConfigured,
+        "Se permitió HTTP hacia un servidor remoto durante el desarrollo.");
+
+    var errorProduccion = false;
+    try
+    {
+        _ = ReservasApiOptions.Load(new ConfigurationBuilder().Build(), false);
+    }
+    catch (InvalidOperationException)
+    {
+        errorProduccion = true;
+    }
+
+    Verificar(errorProduccion, "La aplicación no rechazó la configuración ausente fuera de desarrollo.");
+    var errorHttpProduccion = false;
+    try
+    {
+        _ = CrearOpcionesReservas("http://localhost:5000", clave, false);
+    }
+    catch (InvalidOperationException)
+    {
+        errorHttpProduccion = true;
+    }
+
+    Verificar(errorHttpProduccion, "Se permitió HTTP en producción.");
+    Verificar(!resultado.Mensaje!.Contains(clave, StringComparison.Ordinal),
+        "La clave apareció en el error de configuración.");
+}
+
+static async Task ReservasClienteManejaErroresDeTransporte()
+{
+    var errorConexion = CrearClienteReservas((_, _) =>
+        Task.FromException<HttpResponseMessage>(new HttpRequestException("detalle interno")));
+    var resultadoConexion = await errorConexion.ObtenerMesasAsync();
+    Verificar(resultadoConexion.Failure == ReservasApiFailure.Connection
+        && !resultadoConexion.Mensaje!.Contains("detalle interno", StringComparison.Ordinal),
+        "El error de conexión no se controló o expuso detalles internos.");
+
+    var errorLectura = CrearClienteReservas((_, _) =>
+        Task.FromException<HttpResponseMessage>(new IOException("detalle interno")));
+    var resultadoLectura = await errorLectura.ObtenerMesasAsync();
+    Verificar(resultadoLectura.Failure == ReservasApiFailure.Connection,
+        "No se controló el error de lectura de la conexión.");
+
+    var timeout = CrearClienteReservas((_, _) =>
+        Task.FromException<HttpResponseMessage>(new TaskCanceledException("detalle interno")));
+    var resultadoTimeout = await timeout.ObtenerMesasAsync();
+    Verificar(resultadoTimeout.Failure == ReservasApiFailure.Timeout
+        && !resultadoTimeout.Mensaje!.Contains("detalle interno", StringComparison.Ordinal),
+        "El timeout no se controló o expuso detalles internos.");
 }
 
 static async Task CobroConsultaPedidoYUsaPagoDto()
@@ -253,10 +511,11 @@ static Task AdminRechazaRolesNoPermitidos()
     Verificar(atributo is not null, "AdminController no protege sus acciones con RequireRole.");
     atributo!.OnActionExecuting(context);
 
-    Verificar(context.Result is RedirectToActionResult,
-        "Un usuario que no es administrador obtuvo acceso al controlador Admin.");
-    Verificar(!session.TryGetValue("Token", out _),
-        "No se limpió la sesión del usuario no autorizado.");
+    Verificar(context.Result is StatusCodeResult { StatusCode: StatusCodes.Status403Forbidden },
+        "Un usuario que no es administrador no recibió un 403.");
+    Verificar(session.TryGetValue("Token", out _)
+        && session.TryGetValue("Rol", out _),
+        "Se perdió la sesión del usuario autenticado no autorizado.");
     return Task.CompletedTask;
 }
 
@@ -464,9 +723,60 @@ static Task RequireRoleRechazaRolNoPermitido()
 
     new RequireRoleAttribute("ADMINISTRADOR").OnActionExecuting(context);
 
-    Verificar(context.Result is RedirectToActionResult, "No se rechazó el rol no permitido.");
-    Verificar(!sesion.TryGetValue("Token", out _), "No se limpió la sesión con rol no permitido.");
+    Verificar(context.Result is StatusCodeResult { StatusCode: StatusCodes.Status403Forbidden },
+        "No se respondió 403 para el rol no permitido.");
+    Verificar(sesion.TryGetValue("Token", out _) && sesion.TryGetValue("Rol", out _),
+        "Se limpió la sesión del usuario autenticado.");
     return Task.CompletedTask;
+}
+
+static Task RequireRoleRedirigeSinSesion()
+{
+    var sesion = new TestSession();
+    var controller = new CajaController(CrearCliente((_, _) =>
+        throw new InvalidOperationException("No se esperaba una llamada a la API.")));
+    var context = CrearFiltroContexto(controller, sesion);
+
+    new RequireRoleAttribute("CAJERO", "ADMINISTRADOR").OnActionExecuting(context);
+
+    Verificar(context.Result is RedirectToActionResult
+        {
+            ActionName: "Login",
+            ControllerName: "Account"
+        },
+        "Una solicitud sin sesión no se redirigió al login.");
+
+    var sesionInvalida = new TestSession(("Token", "jwt"), ("Rol", "DESCONOCIDO"));
+    var contextoSesionInvalida = CrearFiltroContexto(controller, sesionInvalida);
+    new RequireRoleAttribute("CAJERO", "ADMINISTRADOR").OnActionExecuting(contextoSesionInvalida);
+    Verificar(contextoSesionInvalida.Result is RedirectToActionResult
+        && !sesionInvalida.TryGetValue("Token", out _),
+        "Una sesión con rol inválido no se limpió ni redirigió al login.");
+    return Task.CompletedTask;
+}
+
+static ReservasApiClient CrearClienteReservas(
+    Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder,
+    ReservasApiOptions? options = null)
+{
+    return new ReservasApiClient(
+        new HttpClient(new StubHttpMessageHandler(responder)),
+        options ?? CrearOpcionesReservas());
+}
+
+static ReservasApiOptions CrearOpcionesReservas(
+    string baseUrl = "https://reservas.test",
+    string serviceApiKey = "clave-prueba-reservas-0123456789-ABC",
+    bool isDevelopment = true)
+{
+    var configuration = new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ReservasApi:BaseUrl"] = baseUrl,
+            ["ReservasApi:ServiceApiKey"] = serviceApiKey
+        })
+        .Build();
+    return ReservasApiOptions.Load(configuration, isDevelopment);
 }
 
 static EasyMenuApiClient CrearCliente(

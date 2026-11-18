@@ -3,6 +3,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddDistributedMemoryCache();
+var reservasApiOptions = EasyMenu.Web.Services.ReservasApiOptions.Load(
+    builder.Configuration,
+    builder.Environment.IsDevelopment());
+builder.Services.AddSingleton(reservasApiOptions);
 var tiempoSesionMinutos = builder.Configuration.GetValue<int?>("Session:IdleTimeoutMinutes") ?? 30;
 if (tiempoSesionMinutos <= 0)
 {
@@ -26,6 +30,7 @@ builder.Services.AddHttpClient<EasyMenu.Web.Services.EasyMenuApiClient>((service
     client.BaseAddress = new Uri($"{apiBaseUrl.TrimEnd('/')}/");
     client.Timeout = TimeSpan.FromSeconds(90);
 });
+builder.Services.AddHttpClient<EasyMenu.Web.Services.ReservasApiClient>();
 
 var app = builder.Build();
 
