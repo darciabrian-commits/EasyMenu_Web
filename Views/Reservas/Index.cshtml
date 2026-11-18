@@ -1,0 +1,81 @@
+@{
+    ViewData["Title"] = "Reservas";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="mb-0">Reservas</h1>
+        <p class="text-secondary mb-0">Consulta y gestiona las reservas del restaurante.</p>
+    </div>
+    @if (Context.Session.GetString("Rol") is "ADMINISTRADOR" or "CAJERO")
+    {
+        <a class="btn btn-primary" asp-controller="Reservas" asp-action="Crear">Nueva reserva</a>
+    }
+</div>
+
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="alert alert-success" role="status">@mensajeExito</div>
+}
+@if (TempData["MensajeError"] is string mensajeError)
+{
+    <div class="alert alert-danger" role="alert">@mensajeError</div>
+}
+
+<form id="filtro-reservas" class="row g-2 align-items-end mb-3">
+    <div class="col-sm-6 col-md-4">
+        <label for="fecha-reservas" class="form-label">Buscar por fecha</label>
+        <input id="fecha-reservas" class="form-control" type="date" name="fecha" />
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-primary" type="submit">Buscar</button>
+        <button class="btn btn-outline-secondary" type="reset">Ver todas</button>
+    </div>
+</form>
+
+<div id="lista-reservas" aria-live="polite">
+    <div class="d-flex align-items-center gap-2 text-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <span>Cargando reservas...</span>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const listaReservas = document.getElementById("lista-reservas");
+        const filtroReservas = document.getElementById("filtro-reservas");
+
+        async function cargarReservas(fecha) {
+            listaReservas.innerHTML = '<div class="d-flex align-items-center gap-2 text-secondary" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Cargando reservas...</span></div>';
+            try {
+                const url = new URL('@Url.Action("Lista", "Reservas")', window.location.origin);
+                if (fecha) url.searchParams.set("fecha", fecha);
+                const respuesta = await fetch(url, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (respuesta.redirected) {
+                    window.location.href = respuesta.url;
+                    return;
+                }
+                if (!respuesta.ok) throw new Error("No fue posible cargar las reservas.");
+                listaReservas.innerHTML = await respuesta.text();
+            } catch (error) {
+                listaReservas.innerHTML = "";
+                const alerta = document.createElement("div");
+                alerta.className = "alert alert-danger";
+                alerta.setAttribute("role", "alert");
+                alerta.textContent = error.message || "No fue posible cargar las reservas.";
+                listaReservas.appendChild(alerta);
+            }
+        }
+
+        filtroReservas.addEventListener("submit", evento => {
+            evento.preventDefault();
+            cargarReservas(document.getElementById("fecha-reservas").value);
+        });
+        filtroReservas.addEventListener("reset", () => {
+            setTimeout(() => cargarReservas(""), 0);
+        });
+        cargarReservas("");
+    </script>
+}

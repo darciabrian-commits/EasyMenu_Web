@@ -1,0 +1,82 @@
+@model ReservaFormularioViewModel
+@{
+    ViewData["Title"] = "Crear reserva";
+}
+
+<div class="mb-4">
+    <a asp-controller="Reservas" asp-action="Index" class="text-decoration-none">&larr; Reservas</a>
+    <h1 class="mt-2 mb-0">Crear reserva</h1>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.MensajeMesas))
+{
+    <div class="alert alert-warning" role="status">@Model.MensajeMesas</div>
+}
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <form asp-controller="Reservas" asp-action="Crear" method="post" data-cargando>
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3" role="alert"></div>
+            <div class="mb-3">
+                <label asp-for="NombreCliente" class="form-label">Nombre del cliente</label>
+                <input asp-for="NombreCliente" class="form-control" maxlength="120" autocomplete="name" />
+                <span asp-validation-for="NombreCliente" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Telefono" class="form-label">Teléfono (opcional)</label>
+                <input asp-for="Telefono" class="form-control" maxlength="30" autocomplete="tel" />
+                <span asp-validation-for="Telefono" class="text-danger"></span>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="FechaReserva" class="form-label">Fecha</label>
+                    <input asp-for="FechaReserva" class="form-control" type="date" />
+                    <span asp-validation-for="FechaReserva" class="text-danger"></span>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="HoraReserva" class="form-label">Hora</label>
+                    <input asp-for="HoraReserva" class="form-control" type="time" />
+                    <span asp-validation-for="HoraReserva" class="text-danger"></span>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6 mb-3">
+                    <label asp-for="CantidadPersonas" class="form-label">Cantidad de personas</label>
+                    <input asp-for="CantidadPersonas" class="form-control" type="number" min="1" step="1" />
+                    <span asp-validation-for="CantidadPersonas" class="text-danger"></span>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label asp-for="MesaId" class="form-label">Mesa activa</label>
+                    <select asp-for="MesaId" class="form-select">
+                        <option value="">Selecciona una mesa</option>
+                        @foreach (var mesa in Model.MesasDisponibles)
+                        {
+                            <option value="@mesa.Id">Mesa @mesa.Numero · capacidad @mesa.Capacidad</option>
+                        }
+                    </select>
+                    <span asp-validation-for="MesaId" class="text-danger"></span>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Observaciones" class="form-label">Observaciones (opcional)</label>
+                <textarea asp-for="Observaciones" class="form-control" maxlength="300" rows="3"></textarea>
+                <span asp-validation-for="Observaciones" class="text-danger"></span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit">Crear reserva</button>
+                <a class="btn btn-outline-secondary" asp-controller="Reservas" asp-action="Index">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.querySelector("form[data-cargando]")?.addEventListener("submit", evento => {
+            if (!$(evento.currentTarget).valid()) return;
+            const boton = evento.currentTarget.querySelector("button[type='submit']");
+            boton.disabled = true;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Creando...';
+        });
+    </script>
+}

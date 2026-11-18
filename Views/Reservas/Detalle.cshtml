@@ -1,0 +1,47 @@
+@model ReservaDetalleViewModel
+@{
+    ViewData["Title"] = "Detalle de reserva";
+}
+
+<div class="mb-4">
+    <a asp-controller="Reservas" asp-action="Index" class="text-decoration-none">&larr; Reservas</a>
+    <h1 class="mt-2 mb-0">Detalle de reserva</h1>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.Mensaje))
+{
+    <div class="alert alert-danger" role="alert">@Model.Mensaje</div>
+}
+else if (Model.Reserva is { } reserva)
+{
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <dl class="row mb-0">
+                @if (Model.MostrarDatosCliente)
+                {
+                    <dt class="col-sm-4">Cliente</dt>
+                    <dd class="col-sm-8">@reserva.NombreCliente</dd>
+                    <dt class="col-sm-4">Teléfono</dt>
+                    <dd class="col-sm-8">@(string.IsNullOrWhiteSpace(reserva.Telefono) ? "No indicado" : reserva.Telefono)</dd>
+                }
+                <dt class="col-sm-4">Fecha</dt>
+                <dd class="col-sm-8">@reserva.FechaReserva.ToString("dd/MM/yyyy")</dd>
+                <dt class="col-sm-4">Hora</dt>
+                <dd class="col-sm-8">@reserva.HoraReserva.ToString("HH:mm")</dd>
+                <dt class="col-sm-4">Mesa</dt>
+                <dd class="col-sm-8">Mesa @reserva.NumeroMesa</dd>
+                <dt class="col-sm-4">Cantidad de personas</dt>
+                <dd class="col-sm-8">@reserva.CantidadPersonas</dd>
+                <dt class="col-sm-4">Estado</dt>
+                <dd class="col-sm-8">@reserva.Estado</dd>
+                <dt class="col-sm-4">Observaciones operativas</dt>
+                <dd class="col-sm-8">@(string.IsNullOrWhiteSpace(reserva.Observaciones) ? "Sin observaciones" : reserva.Observaciones)</dd>
+            </dl>
+            @if (Model.PuedeGestionar)
+            {
+                <a class="btn btn-outline-primary mt-3"
+                   asp-controller="Reservas" asp-action="Editar" asp-route-id="@reserva.Id">Editar</a>
+            }
+        </div>
+    </div>
+}
